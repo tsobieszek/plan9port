@@ -61,6 +61,7 @@
 00DD  'Y          Ý	latin capital letter y acute
 00DE  |P          Þ	latin capital letter thorn
 00DF  ss          ß	latin small letter sharp s
+1e9e  sS Ss       ẞ	latin capital letter sharp s
 00E0  `a          à	latin small letter a grave
 00E1  'a          á	latin small letter a acute
 00E2  ^a          â	latin small letter a circumflex
@@ -216,7 +217,6 @@
 01A2  OI          Ƣ	latin capital letter o i
 01A3  oi          ƣ	latin small letter o i
 01A6  YR          Ʀ	latin letter y r
-01B2  $V          Ʋ	latin capital letter script v
 01B5  -Z Z-       Ƶ	latin capital letter z bar
 01B6  -z z-       ƶ	latin small letter z bar
 01BB  -2 2-       ƻ	latin letter two bar
@@ -414,6 +414,10 @@
 207D  s(          ⁽	superscript opening parenthesis
 207E  s)          ⁾	superscript closing parenthesis
 2071  si          ⁱ	superscript latin small letter i
+02b2  sj          ʲ	superscript latin small letter i
+1d4f  sk          ᵏ	superscript latin small letter k
+02e1  sl          ˡ	superscript latin small letter l
+1d50  sm          ᵐ	superscript latin small letter m
 207F  sn          ⁿ	superscript latin small letter n
 2013  en          –	en dash
 2014  em          —	em dash
@@ -432,6 +436,12 @@
 208C  b=          ₌	subscript equals sign
 208D  b(          ₍	subscript opening parenthesis
 208E  b)          ₎	subscript closing parenthesis
+1d62  bi          ᵢ	subscript latin small letter i
+2c7c  bj          ⱼ	subscript latin small letter j
+2096  bk          ₖ	subscript latin small letter k
+2097  bl          ₗ	subscript latin small letter l
+2098  bm          ₘ	subscript latin small letter m
+2099  bn          ₙ	subscript latin small letter n
 20AC  e$          €	euro symbol
 2102  CC          ℂ	double-struck capital c
 210A  $g          ℊ	script small g
@@ -473,11 +483,15 @@
 2192  ->          →	right arrow
 2193  da          ↓	down arrow
 2194  ab          ↔	left right arrow
-21D0  V=          ⇐	left double arrow
-21D2  =V          ⇒	right double arrow
+21A6  mt          ↦	right arrow from bar
+21A4  mf          ↤	left arrow from bar
+21D0  v=          ⇐	left double arrow
+21D2  =v          ⇒	right double arrow
+21D4  eq          ⇔	left right double arrow
 21E4  |<          ⇤	left arrow to bar
 21E5  >|          ⇥	right arrow to bar
 2200  fa          ∀	for all
+2201  cc          ∁	complement
 2202  pd          ∂	partial differential
 2203  te          ∃	there exists
 2205  es          ∅	empty set
@@ -485,17 +499,21 @@
 2207  gr          ∇	nabla
 2208  mo          ∈	element of
 2209  !m          ∉	not an element of
+220B  om          ∋	contains
 220D  st          ∍	small contains as member
 220F  pr          ∏	n-ary product
+2210  cp          ∐	n-ary co-product
 2211  su          ∑	n-ary summation
 2213  -+          ∓	minus-or-plus sign
 2217  **          ∗	asterisk operator
 2218  co          ∘	composition operator
+2219  cd          ∙	central dot
 221A  sr          √	square root
 221D  pt          ∝	proportional to
 221E  if          ∞	infinity
 2220  an          ∠	angle
 2225  pp          ∥	parallel to
+2016  nm          ‖	norm
 2227  l&          ∧	logical and
 2228  l|          ∨	logical or
 2229  ca          ∩	intersection
@@ -539,6 +557,7 @@
 229B  O*          ⊛	circled asterisk operator
 229C  =O O=       ⊜	circled equals
 22A2  tu          ⊢	right tack
+22A5  ot          ⊥ orthogonal to
 22A8  Tu          ⊨	true
 22B2  ld          ⊲ normal subgroup of
 22B3  rd          ⊳ contains as normal subgroup
@@ -560,6 +579,8 @@
 2329  </          〈 left angle bracket
 232a  />          〉 right angle bracket
 2423              ␣	open box, visible space
+25A1  qe          □ q.e.d
+25EF  ci          ◯ circle constant
 2639  :(          ☹ sad face
 263A  :)          ☺ smiley face
 2654  wk          ♔	white chess king
@@ -568,20 +589,37 @@
 2657  wb          ♗	white chess bishop
 2658  wn          ♘	white chess knight
 2659  wp          ♙	white chess pawn
-265A  bk          ♚	black chess king
 265B  bq          ♛	black chess queen
 265C  br          ♜	black chess rook
 265D  bb          ♝	black chess bishop
-265E  bn          ♞	black chess knight
 265F  bp          ♟	black chess pawn
 2669  M4          ♩	music quarter note
 266a  M8          ♪	music eighth note
 266d  Mb          ♭	music flat
 266e  M#          ♮	music natural
 266f  Ms          ♯	music sharp
+2A2F  xx          ⨯ cross product
 300a  <+          《	left double angle bracket
 300b  +>          》	right double angle bracket
 F015  ZA          	raw alt (plan 9 specific)
 F016  ZS          	raw shift (plan 9 specific)
 F017  ZC          	raw ctl (plan 9 specific)
+1D49C $A          𝒜 script captial A
+1d49e $C          𝒞 script captial C
+1d49f $D          𝒟 script captial D
+1d4a2 $G          𝒢 script captial G
+1d4a5 $J          𝒥 script captial J
+1d4a6 $K          𝒦 script captial K
+1d4a9 $N          𝒩 script captial N
+1d4aa $O          𝒪 script captial O
+1d4ab $P          𝒫 script captial P
+1d4ac $Q          𝒬 script captial Q
+1d4ae $S          𝒮 script captial S
+1d4af $T          𝒯 script captial T
+1d4b0 $U          𝒰 script captial U
+1d4b1 $V          𝒱 script captial V
+1d4b2 $W          𝒲 script captial W
+1d4b3 $X          𝒳 script captial X
+1d4b4 $Y          𝒴 script captial Y
+1d4b5 $Z          𝒵 script captial Z
 1F602 :,          😂 face with tears of joy
