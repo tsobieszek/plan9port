@@ -338,6 +338,18 @@ xfidread(Xfid *x)
 		b = winctlprint(w, buf, 1);
 		goto Readb;
 
+	case QWnctl: {
+		char *fn;
+		ulong col;
+		fn = w->emphfont ? w->emphfont->f->name
+			: (w->emphfontpath ? w->emphfontpath : emphfontname(w));
+		if(fn == nil)
+			fn = w->body.reffont->f->name;
+		col = w->emphcolor ? w->emphcolorrgb : emphglobalcolorrgb;
+		b = smprint("%s %06lux ", fn, col >> 8);
+		goto Readb;
+	}
+
 	Readbuf:
 		b = buf;
 	Readb:
@@ -529,6 +541,10 @@ xfidwrite(Xfid *x)
 
 	case QWctl:
 		xfidctlwrite(x, w);
+		break;
+
+	case QWnctl:
+		xfidnctlwrite(x, w);
 		break;
 
 	case QWdata:
@@ -796,30 +812,6 @@ out:
 			w->limit.q1 = w->addr.q1;
 			m = 10;
 		}else
-		if(strncmp(p, "emph=", 5) == 0){	/* set emphasis pattern */
-			pp = p+5;
-			m = 5;
-			q = memchr(pp, '\n', e-pp);
-			if(q==nil || q==pp){
-				err = Ebadctl;
-				break;
-			}
-			*q = 0;
-			nulls = FALSE;
-			cvttorunes(pp, q-pp, r, &nb, &nr, &nulls);
-			if(nulls){
-				err = "nulls in emph regex";
-				break;
-			}
-			setemph(w, r, nr, TRUE);
-			scrdraw = TRUE;
-			m += (q+1) - pp;
-		}else
-		if(strncmp(p, "noemph", 6) == 0){	/* turn off emphasis */
-			setemph(w, nil, 0, FALSE);
-			scrdraw = TRUE;
-			m = 6;
-		}else
 		if(strncmp(p, "nomark", 6) == 0){	/* turn off automatic marking */
 			w->nomark = TRUE;
 			m = 6;
@@ -862,6 +854,115 @@ out:
 	respond(x, &fc, err);
 	if(settag)
 		winsettag(w);
+	if(scrdraw)
+		textscrdraw(&w->body);
+}
+
+void
+xfidnctlwrite(Xfid *x, Window *w)
+{
+	Fcall fc;
+	int m, n, nb, nr, nulls;
+	Rune *r;
+	char *err, *p, *pp, *q, *e;
+	int isfbuf, scrdraw;
+	ulong rgb;
+
+	err = nil;
+	e = x->fcall.data+x->fcall.count;
+	scrdraw = FALSE;
+	isfbuf = TRUE;
+	if(x->fcall.count < RBUFSIZE)
+		r = fbufalloc();
+	else{
+		isfbuf = FALSE;
+		r = emalloc(x->fcall.count*UTFmax+1);
+	}
+	x->fcall.data[x->fcall.count] = 0;
+	for(n=0; n<x->fcall.count; n+=m){
+		p = x->fcall.data+n;
+		if(strncmp(p, "emphfont ", 9) == 0){
+			pp = p+9;
+			m = 9;
+			q = memchr(pp, '\n', e-pp);
+			if(q==nil || q==pp){
+				err = Ebadctl;
+				break;
+			}
+			*q = 0;
+			nulls = FALSE;
+			cvttorunes(pp, q-pp, r, &nb, &nr, &nulls);
+			if(nulls){
+				err = "nulls in emphfont path";
+				break;
+			}
+			emphfontx(&w->body, nil, nil, FALSE, XXX, r, nr);
+			scrdraw = TRUE;
+			m += (q+1) - pp;
+		}else
+		if(strncmp(p, "emphfont\n", 9) == 0 || strcmp(p, "emphfont") == 0){
+			emphfontx(&w->body, nil, nil, FALSE, XXX, nil, 0);
+			scrdraw = TRUE;
+			m = 8;
+		}else
+		if(strncmp(p, "emph=", 5) == 0){
+			pp = p+5;
+			m = 5;
+			q = memchr(pp, '\n', e-pp);
+			if(q==nil || q==pp){
+				err = Ebadctl;
+				break;
+			}
+			*q = 0;
+			nulls = FALSE;
+			cvttorunes(pp, q-pp, r, &nb, &nr, &nulls);
+			if(nulls){
+				err = "nulls in emph regex";
+				break;
+			}
+			setemph(w, r, nr, TRUE);
+			scrdraw = TRUE;
+			m += (q+1) - pp;
+		}else
+		if(strncmp(p, "noemph", 6) == 0){
+			setemph(w, nil, 0, FALSE);
+			scrdraw = TRUE;
+			m = 6;
+		}else
+		if(strncmp(p, "emphcolor ", 10) == 0){
+			pp = p+10;
+			m = 10;
+			q = memchr(pp, '\n', e-pp);
+			if(q==nil || q==pp){
+				err = Ebadctl;
+				break;
+			}
+			*q = 0;
+			if(parsecolor(pp, &rgb) != 0){ err = "bad emphcolor spec"; break; }
+			winsetemphcolor(w, rgb);
+			scrdraw = TRUE;
+			m += (q+1) - pp;
+		}else
+		if(strncmp(p, "emphcolor\n", 10) == 0 || strcmp(p, "emphcolor") == 0){
+			winresetemphcolor(w);
+			scrdraw = TRUE;
+			m = 9;
+		}else{
+			err = Ebadctl;
+			break;
+		}
+		while(p[m] == '\n')
+			m++;
+	}
+
+	if(isfbuf)
+		fbuffree(r);
+	else
+		free(r);
+	if(err)
+		n = 0;
+	fc.count = n;
+	respond(x, &fc, err);
 	if(scrdraw)
 		textscrdraw(&w->body);
 }

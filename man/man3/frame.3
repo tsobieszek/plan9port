@@ -1,6 +1,6 @@
 .TH FRAME 3
 .SH NAME
-frinit, frsetrects, frinittick, frclear, frcharofpt, frptofchar, frinsert, frdelete, frselect, frtick, frselectpaint, frdrawsel, frdrawsel0, frgetmouse \- frames of text
+frinit, frsetrects, frinittick, frclear, frcharofpt, frptofchar, frinsert, frdelete, frselect, frtick, frselectpaint, frdrawsel, frdrawsel0, frsetboxfont, frrelayout, frgetmouse \- frames of text
 .SH SYNOPSIS
 .nf
 .B
@@ -59,6 +59,12 @@ void  frdrawsel0(Frame *f, Point pt0, ulong p0, ulong p1,
 .B
 		Image *back, Image *text)
 .PP
+.B
+void  frsetboxfont(Frame *f, ulong p0, ulong p1, Font *font)
+.PP
+.B
+void  frrelayout(Frame *f)
+.PP
 .ft L
 enum{
 	BACK,
@@ -66,6 +72,7 @@ enum{
 	BORD,
 	TEXT,
 	HTEXT,
+	EMPH,
 	NCOL
 };
 .fi
@@ -90,6 +97,8 @@ typedef struct Frame Frame;
 struct Frame
 {
 	Font	*font;		/* of chars in the frame */
+	int	lineheight;	/* line height (>= font->height) */
+	int	ascent;		/* font ascent from top of line */
 	Display	*display;	/* on which frame appears */
 	Image	*b;		/* on which frame appears */
 	Image	*cols[NCOL];	/* text and background colors */
@@ -200,8 +209,31 @@ borders and scroll bar in
 .BR cols[BORD] ;
 regular text in
 .BR cols[TEXT] ;
-and highlighted text in
-.BR cols[HTEXT] .
+highlighted text in
+.BR cols[HTEXT] ;
+and text in boxes with a per-box font (set via
+.IR frsetboxfont )
+in
+.BR cols[EMPH] .
+.PP
+.I Lineheight
+is the height in pixels of each text line in the frame;
+it is initialized by
+.I frinit
+to
+.IB ft ->height
+and may be increased (but not decreased) by the application before text is
+inserted, for example to accommodate a second font taller than the frame font.
+.I Ascent
+is the distance in pixels from the top of a line to the baseline;
+it governs vertical alignment when boxes of different fonts share a line.
+Both fields are maintained automatically by
+.I frinit
+and
+.IR frsetrects ;
+applications that change them must call
+.I frinittick
+afterwards to resize the typing cursor.
 .PP
 .I Frclear
 frees the internal structures associated with
@@ -354,6 +386,31 @@ to paint a region of the frame defined by the
 .I p0
 and
 .IR p1 .
+.PP
+.I Frsetboxfont
+assigns
+.I font
+to every box covering the rune range
+.RI [ p0 , p1 ),
+splitting boxes at the range boundaries as needed; a null
+.I font
+restores the frame font.
+It updates box widths but does not reflow the frame, so the layout
+(line wrapping,
+.IB f ->nlines\fR,
+.IB f ->nchars\fR)
+may become inconsistent if the new font is wider.
+.I Frrelayout
+recomputes the layout of
+.I f
+after such per-box font changes: it re-splits boxes for the current
+.B Frame
+width, drops boxes that overflow the frame, and refreshes
+.IB f ->nlines
+and the selection bounds.
+It performs no drawing; the caller redraws with
+.I frredraw
+afterwards.
 .SH SOURCE
 .B \*9/src/libframe
 .SH SEE ALSO

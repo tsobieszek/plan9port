@@ -454,11 +454,24 @@ rowdump1(Row *row, Biobuf *b)
 				else
 					Bprint(b, "\n%s\n", w->dumpstr);
 			}
+			if(w->dumpstr == nil && (w->emphpat != nil || w->emphfontpath != nil)){
+				Bprint(b, "m %d\n", w->emphon);
+				if(w->emphfontpath != nil)
+					Bprint(b, "%s\n", w->emphfontpath);
+				else
+					Bprint(b, "\n");
+				if(w->emphpat != nil)
+					Bprint(b, "%.*S\n", w->nemphpat, w->emphpat);
+				else
+					Bprint(b, "\n");
+			}
     Continue2:;
 		}
 	}
 	fbuffree(r);
 	fbuffree(buf);
+	if(autoemph)
+		Bprint(b, "A %d\n", autoemph);
 }
 
 void
@@ -731,6 +744,31 @@ rowload(Row *row, char *file, int initing)
 			ndumped = -1;
 			dumpid = atoi(l+1+1*12);
 			break;
+		case 'm':
+			l[Blinelen(b)-1] = 0;
+			x = atoi(l+2);
+			l = rdline(b, &line);
+			if(l == nil)
+				goto Rescue2;
+			l[Blinelen(b)-1] = 0;
+			if(*l && w != nil){
+				w->emphfontpath = estrdup(l);
+				winensureemphfont(w);
+			}
+			l = rdline(b, &line);
+			if(l == nil)
+				goto Rescue2;
+			l[Blinelen(b)-1] = 0;
+			if(*l && w != nil){
+				r = bytetorune(l, &nr);
+				setemph(w, r, nr, x);
+				free(r);
+			}
+			goto Nextline;
+		case 'A':
+			l[Blinelen(b)-1] = 0;
+			autoemph = atoi(l+2);
+			goto Nextline;
 		default:
 			goto Rescue2;
 		}
@@ -828,11 +866,29 @@ rowload(Row *row, char *file, int initing)
 		textshow(&w->body, q0, q1, 1);
 		w->maxlines = min(w->body.fr.nlines, max(w->maxlines, w->body.fr.maxlines));
 		xfidlog(w, "new");
-Nextline:
+	Nextline:
 		l = rdline(b, &line);
 	}
 	Bterm(b);
 	fbuffree(buf);
+	/*
+	 * Apply auto-emphasis to all loaded windows.  The 'A' line in the
+	 * dump is written last, so autoemph was 0 while windows were being
+	 * created (emphauto inside get() did nothing).  Now that autoemph
+	 * is correctly restored, sweep the row to catch up.
+	 */
+	if(autoemph){
+		int ai, aj;
+		Column *ac;
+		Window *aw;
+		for(ai = 0; ai < row->ncol; ai++){
+			ac = row->col[ai];
+			for(aj = 0; aj < ac->nw; aj++){
+				aw = ac->w[aj];
+				emphauto(aw);
+			}
+		}
+	}
 	return TRUE;
 
 Rescue2:

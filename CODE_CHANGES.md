@@ -402,6 +402,196 @@ de dessin. Rejeté car :
 
 ---
 
+## 5.2. Extension : hauteur de ligne variable (Phase 1, 2026-05-15)
+
+Jusqu'à la Phase 1, libframe supposait que toutes les boîtes d'un frame ont la
+même hauteur — celle de `f->font`. Avec une police d'emphase de hauteur différente,
+ce supposé était violé, produisant des lignes trop courtes, une mauvaise détection
+de clic, et un curseur de saisie trop petit.
+
+### Nouveaux champs dans `Frame`
+
+```c
+int  lineheight;   /* hauteur de ligne effective (>= font->height) */
+int  ascent;       /* distance haut-de-ligne -> baseline */
+```
+
+`frinit` initialise ces champs à `ft->height` et `ft->ascent`. Tous les calculs
+de hauteur dans libframe utilisent désormais `f->lineheight` à la place de
+`f->font->height`.
+
+### Macro `FRBOXDY`
+
+```c
+#define FRBOXDY(f,b)  ((f)->ascent - FRBOXFONT(f,b)->ascent)
+```
+
+Cette macro calcule le décalage vertical pour aligner le texte d'une boîte sur la
+baseline commune du frame. Pour une boîte standard (`b->font == nil`) avec une
+police de même ascent que le frame, `FRBOXDY` vaut 0 — comportement identique à
+l'existant (rétrocompatibilité `sam`/`samterm`/`9term`).
+
+### Côté acme : `emphsetmetrics`
+
+Appelé juste après `frinit` dans `textredraw`, ce helper calcule
+`max(font->height, emphfont->height)` et `max(font->ascent, emphfont->ascent)`
+et met à jour `fr.lineheight` / `fr.ascent`. Il requantifie ensuite `fr.r.max.y`
+et `fr.maxlines` à partir de `fr.entire` (non quantifié par `frsetrects`), puis
+appelle `frinittick` pour redimensionner le curseur.
+
+**Décision de conception** : la hauteur de ligne d'un body est fixée dès que la
+fenêtre possède une police d'emphase chargée, indépendamment de `emphon`. Activer
+ou désactiver l'emphase ne provoque pas de recomposition — seul le chargement ou
+le changement de police d'emphase le fait (via `winresize` dans `winensureemphfont`).
+
+---
+
+## 5.3. Commande `EmphFont` + fichier 9P `nctl` (Phase 2, 2026-05-15)
+
+### Champ `Window.emphfontpath`
+
+Nouveau champ `char *emphfontpath` dans `struct Window` : chemin de la police
+d'emphase épinglée par `EmphFont`. Nil = choix automatique selon `emphfontname`.
+
+### `winensureemphfont`
+
+Centralise l'acquisition de la police d'emphase : choisit `emphfontpath` s'il est
+non-nil, sinon `emphfontname(w)`. Si la police change (nouvelle hauteur possible),
+appelle `rfclose` puis `winresize(w, w->r, FALSE, TRUE)` pour recomposer.
+
+### Commande `EmphFont` (`exec.c`)
+
+Enregistrée dans `exectab[]` (entre `Emph` et `Exit`). Handler `emphfontx` :
+argument direct ou chord 2-1, stocke le chemin dans `w->emphfontpath`, appelle
+`winensureemphfont`, puis ré-applique l'emphase. Sans argument : reset au choix
+automatique.
+
+### Fichier 9P `nctl`
+
+Nouveau fichier par fenêtre dans `dirtabw[]` (QWnctl, entre `event` et `rdsel`).
+
+- **Lecture** : renvoie le nom de la police d'emphase courante + `\n`, ou `\n`
+  seul si aucune police n'est chargée.
+- **Écriture** : verbes `emphfont <path>`, `emphfont` (reset), `emph=<regex>`,
+  `noemph`. Traités par `xfidnctlwrite`.
+
+Les verbes `emph=` et `noemph` ont été **retirés de `ctl`** pour que `ctl` reste
+strictement standard. Toute écriture d'emphase doit désormais passer par `nctl`.
+
+---
+
+## 5.4. Persistance dump/load (Phase 3, 2026-05-15)
+
+### Bloc emphase `m` par fenêtre
+
+`rowdump1` émet, après le bloc corps/dumpstr de chaque fenêtre, trois lignes
+supplémentaires si la fenêtre a une emphase active :
+
+```
+m <emphon>
+<emphfontpath ou ligne vide>
+<emphpat en UTF ou ligne vide>
+```
+
+`rowload` reconnaît `case 'm'` dans son `switch(l[0])` et restaure `emphfontpath`,
+appelle `winensureemphfont`, puis `setemph`. Rétrocompatible : un dump sans ligne
+`m` est chargé normalement.
+
+### Ligne `A` globale
+
+`rowdump1` émet `A <autoemph>` en toute fin de fichier si `autoemph != 0`.
+`rowload case 'A'` restaure `autoemph = atoi(l+2)`.
+
+---
+
+## 5.5. `lib/emph.regexp` + `EmphMe`/`EmphAll`/`EmphNone`/`AutoEmph` (Phase 4, 2026-05-15)
+
+### `lib/emph.regexp`
+
+Fichier `$PLAN9/lib/emph.regexp` (ou `$HOME/lib/emph.regexp` en repli) : une
+ligne `ext=motif` par extension de fichier reconnue (13 langages initiaux : flix,
+jl, c, h, py, rs, go, js, md, sh, rc, hs, lua).
+
+### Fonctions de logique commune (`text.c`)
+
+- `fileext(Rune *name, int nname, int *plen)` : extrait l'extension après le
+  dernier `.` situé après le dernier `/`.
+- `emphpattern(char *ext)` : ouvre `lib/emph.regexp`, cherche `ext=...`, renvoie
+  le motif en runes.
+- `emphbyext(Window *w)` : combine les deux, appelle `setemph` si le motif est
+  trouvé.
+- `emphauto(Window *w)` : appelle `emphbyext` si `autoemph && !w->emphon &&
+  w->emphpat == nil`.
+
+### Nouvelles commandes (`exec.c`)
+
+| Commande | Comportement |
+|---|---|
+| `EmphMe` | `emphbyext` sur la fenêtre courante |
+| `EmphAll` | `emphbyext` sur toutes les fenêtres non-scratch |
+| `EmphNone` | `setemph(w, nil, 0, FALSE)` sur toutes les fenêtres |
+| `AutoEmph` | bascule `autoemph` (global), affiche l'état |
+
+### Hook `emphauto`
+
+Appelé à la fin de `get()` (`exec.c`) et dans les trois entonnoirs d'ouverture de
+fichier : `readfile()` (`acme.c`), `plumbshow()` et `openfile()` (`look.c`).
+`AutoEmph` s'applique donc à l'ouverture CLI, plumb, `New`, et `Get`.
+
+### Variable globale `autoemph`
+
+`int autoemph;` défini dans `dat.c`, déclaré `extern` dans `dat.h`. Persisté par
+le dump (ligne `A`, voir § 5.4).
+
+---
+
+## 5.6. Correctif : débordement / crash après `Emph` (2026-05-16)
+
+La police d'emphase est souvent **plus large** que la police standard. Or
+`frsetboxfont` (libframe) se contente d'élargir les boîtes emphasées
+(`b->wid` recalculé) **sans refaire la mise en page**. Les boîtes dépassent
+alors `f->r.max.x` tandis que `nlines`/`maxlines`/`nchars` restent figés sur
+la mise en page calculée en police standard.
+
+Conséquences observées :
+
+1. `frdrawsel0`/`_frcklinewrap` replient une boîte **entière** dès qu'elle ne
+   tient plus — d'où des plis « étranges » tôt dans une longue ligne, et
+   **plus de lignes affichées** que prévu. La zone de corps déborde sur la
+   tagline de la fenêtre du dessous.
+2. `nlines` périmé (trop petit) rend incohérents les calculs de scroll et de
+   conversion pixel ↔ caractère → `drawerror`/`sysfatal` (crash) après
+   quelques scrolls et déplacements de fenêtres.
+
+### `src/libframe/frboxfont.c` — nouvelle fonction `frrelayout`
+
+`frrelayout(Frame *f)` rejoue la passe de mise en page **pure** `_frdraw`
+(re-découpe les boîtes pour la largeur courante, supprime le trop-plein qui
+déborde du frame et ajuste `nchars`), puis `_frclean` (fusion des boîtes
+adjacentes, `lastlinefull`), recalcule `nlines` et borne `p0`/`p1` sur
+`nchars`. Aucun dessin : l'appelant redessine ensuite via `frredraw`.
+
+Rejouer `_frdraw` sur un tableau déjà découpé est sûr : l'emphase ne fait
+qu'élargir, donc les points de repli ne peuvent que reculer.
+
+### `src/cmd/acme/text.c` — branchement
+
+`emphapply` appelle désormais `frrelayout` **dans tous les cas** (emphase on
+*et* off), suivi de `textfill` : à l'extinction de l'emphase les boîtes
+rétrécissent et le frame sous-rempli est complété (`textfill` s'auto-garde
+via `lastlinefull`). `setemph` (et `emphrefresh`) appellent `textsetselect`
+avant `frredraw` pour resynchroniser la sélection si `_frdraw` a supprimé des
+boîtes.
+
+### `src/cmd/acme/cols.c` — durcissement hauteur
+
+`colresize` utilisait encore le `font->height` global comme hauteur minimale
+de fenêtre ; remplacé par `tag.fr.font->height*taglines + body.fr.lineheight`,
+de sorte qu'une police d'emphase plus **haute** laisse toujours la place
+d'au moins une ligne de corps.
+
+---
+
 ## 6. Récapitulatif des difficultés rencontrées
 
 | Problème | Cause | Solution |
@@ -415,6 +605,7 @@ de dessin. Rejeté car :
 | Police d'emphase fixe (`-E`) jamais utilisée | `setemph` chargeait toujours `fontnames[2]` | `emphfontname` choisit `[2]`/`[3]` selon le mode du corps |
 | `Font` ne basculait pas l'emphase | `fontx` ignorait `w->emphfont` | `emphfontupdate` appelé après le changement de police |
 | Emphase fantôme après collage | `frinsert` repeint les boîtes *avant* que `emphapply` corrige leur police, et `emphapply` seul ne redessine pas | `emphapplylocal` appelle `frredraw` après `emphapply` |
+| Débordement / crash après `Emph` (police plus large) | `frsetboxfont` élargit les boîtes sans refaire la mise en page ; `nlines`/`nchars` périmés | `frrelayout` rejoue `_frdraw` après `frsetboxfont`, appelée par `emphapply` ; voir § 5.6 |
 
 Le **dernier** cas mérite un mot, car il illustre un piège d'ordre des opérations.
 Lorsqu'on colle un caractère au milieu d'un mot emphasé (`abc` devient `a bc`,
@@ -448,10 +639,94 @@ chemin de dessin se fait à la main en lançant `acme`.
 
 ## 8. Documentation
 
-- `man/man1/acme.1` : options `-e`/`-E` et commande `Emph`, option `-C` pour la couleur d'emphase.
-- `man/man4/acme.4` : verbes `ctl` `emph=` et `noemph`.
+- `man/man1/acme.1` : options `-e`/`-E` (sans restriction de hauteur), option
+  `-C`, commandes `Emph`, `EmphAll`, `EmphFont`, `EmphMe`, `EmphNone`, `AutoEmph`.
+  Fichier `$PLAN9/lib/emph.regexp` dans la section FILES.
+- `man/man4/acme.4` : fichier `nctl` (verbes `emphfont path`, `emphfont`, `emph=`,
+  `noemph` ; lecture = police courante). Les verbes `emph=`/`noemph` ont été
+  **retirés de `ctl`** pour garder `ctl` strictement standard.
+- `man/man3/frame.3` : champs `lineheight` et `ascent` de `Frame`, sémantique de
+  hauteur variable, slot `EMPH` dans l'enum `cols[]` (NCOL = 6).
 
-La contrainte importante à connaître : la **police d'emphase doit avoir la même
-hauteur de ligne** que la police principale. La largeur des glyphes peut différer
-(les lignes se recomposent en conséquence), mais pas la hauteur — libframe suppose
-une hauteur de ligne uniforme dans tout le frame.
+---
+
+## 9. Correctifs des bugs d'emphasis (2026-05-16)
+
+Après le déploiement initial, deux bugs critiques ont été identifiés et corrigés :
+
+### Bug 1 — Crash immédiat après toute écriture avec emphasis activée
+
+**Symptôme** : Lors de la frappe avec un EmphFont plus grand, acme plantait
+quelques millisecondes après chaque caractère sans message d'erreur.
+
+**Cause racinaire** : `textinsert` appelait `emphapplylocal()` même quand `tofile==FALSE`
+(c'est-à-dire quand le texte était juste en cache, pas encore dans le fichier).
+`emphapply` utilisait alors des ranges d'emphasis qui ne correspondaient pas au
+contenu réel du fichier, ce qui causait un état invalide dans `frrelayout`.
+
+**Correctif** (`text.c:433`) :
+```c
+// AVANT:
+if(t->what == Body && t->w && t->w->emphon){
+    emphshift(t->w, q0, n);
+    if(tofile)
+        emphrefreshlocal(t->w, q0, q0 + n);
+    emphapplylocal(t->w, q0, q0 + n);  // BUG: toujours appelé
+}
+
+// APRÈS:
+if(t->what == Body && t->w && t->w->emphon){
+    emphshift(t->w, q0, n);
+    // Defer all emphasis refresh/apply to textcommit
+}
+```
+
+Similaire dans `textdelete` (ligne 553) : rendre `emphshift` seul.
+
+**Résultat** : L'emphasis n'est appliquée/rafraîchie que dans `textcommit`, une
+seule fois par opération d'édition, quand le fichier est effectivement à jour.
+
+### Bug 2 — Caractères corrompus et crashes lors de cut/paste massif avec emphasis
+
+**Symptôme** : Après un paste massif (boucle) avec emphasis activée, des caractères
+« face » (non-imprimables, génériques) apparaissaient dans la zone collée. Suivi
+d'un crash au clic suivant ou au cut suivant.
+
+**Cause racinaire** : `textinsert` appelait `emphapplylocal()` à **chaque itération**
+de la boucle paste. Cela modifiait progressivement `emphmatch[]` sans synchronisation :
+la première itération supprimait les ranges qui chevauchaient la première tranche
+insérée, mais les itérations suivantes travaillaient sur des ranges désynchronisées,
+causant une corruption progressive des données d'emphasis et des artefacts visuels.
+
+**Correctif** (même changement que Bug 1) : Ne pas appeler `emphapplylocal` dans
+`textinsert`/`textdelete`, seulement `emphshift` (qui décale les positions sans
+refaire la recherche). Laisser `textcommit` faire le refresh+apply une seule fois.
+
+**Résultat** : Le paste n'appelle plus `emphapplylocal()` en boucle. Après la
+boucle, un seul commit final rafraîchit proprement l'emphasis sans corruption.
+
+### Changements supplémentaires
+
+`src/cmd/acme/exec.c` (cut/paste) :
+- Ligne 1008: `if(docut && t->ncache != 0)` — ne vider le cache que lors du
+  vrai cut, pas lors de snarf pur.
+- Ligne 1072: `if(t->ncache != 0)` — vider le cache avant paste pour éviter
+  les conflits de cache/données.
+
+`src/cmd/acme/fns.h` :
+- Ajout de `void typecommit(Text*);` pour que `exec.c` puisse l'appeler.
+
+`src/cmd/acme/text.c:1003` :
+- (Bug 1 du plan original, déjà fix) : `t->ncache = 0` avant `emphrefreshlocal`
+  pour prévenir la récursion infinie textcommit→textfill→typecommit.
+
+### Résumé
+
+| Bug | Cause | Correctif | Impact |
+|---|---|---|---|
+| Crash write | emphasis appliquée sur cache (tofile==FALSE) | déférer emphasis à textcommit | Write =\> no crash ✓ |
+| Corruption paste | emphapplylocal en boucle | déférer emphasis à textcommit | Paste =\> clean data ✓ |
+
+La **clé architecturale** : centraliser tout refresh/apply d'emphasis dans
+`textcommit()`, appelé une seule fois par opération logique, plutôt que dans
+chaque `textinsert`/`textdelete` qui peut être appelé en boucle.

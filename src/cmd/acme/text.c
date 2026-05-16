@@ -1,5 +1,6 @@
 #include <u.h>
 #include <libc.h>
+#include <bio.h>
 #include <draw.h>
 #include <thread.h>
 #include <cursor.h>
@@ -20,6 +21,28 @@ static Rune Ldot[] = { '.', 0 };
 enum{
 	TABDIR = 3	/* width of tabs in directory windows */
 };
+
+static void
+emphsetmetrics(Text *t)
+{
+	int h, a;
+	Font *ef;
+	Rectangle entire;
+
+	if(t->what != Body || t->w == nil || t->w->emphfont == nil)
+		return;
+	ef = t->w->emphfont->f;
+	h = max(t->fr.font->height, ef->height);
+	a = max(t->fr.font->ascent, ef->ascent);
+	if(h == t->fr.lineheight && a == t->fr.ascent)
+		return;
+	t->fr.lineheight = h;
+	t->fr.ascent = a;
+	entire = t->fr.entire;
+	t->fr.r.max.y = entire.max.y - (entire.max.y - entire.min.y) % h;
+	t->fr.maxlines = (t->fr.r.max.y - entire.min.y) / h;
+	frinittick(&t->fr);
+}
 
 void
 textinit(Text *t, File *f, Rectangle r, Reffont *rf, Image *cols[NCOL])
@@ -45,10 +68,6 @@ textredraw(Text *t, Rectangle r, Font *f, Image *b, int odx)
 	Rectangle rr;
 
 	frinit(&t->fr, r, f, b, t->fr.cols);
-	rr = t->fr.r;
-	rr.min.x -= Scrollwid+Scrollgap;	/* back fill to scroll bar */
-	if(!t->fr.noredraw)
-		draw(t->fr.b, rr, t->fr.cols[BACK], nil, ZP);
 	/* use no wider than 3-space tabs in a directory */
 	maxt = maxtab;
 	if(t->what == Body){
@@ -58,6 +77,11 @@ textredraw(Text *t, Rectangle r, Font *f, Image *b, int odx)
 			maxt = t->tabstop;
 	}
 	t->fr.maxtab = maxt*stringwidth(f, "0");
+	emphsetmetrics(t);	/* may expand fr.r.max.y; must precede background fill */
+	rr = t->fr.r;
+	rr.min.x -= Scrollwid+Scrollgap;	/* back fill to scroll bar */
+	if(!t->fr.noredraw)
+		draw(t->fr.b, rr, t->fr.cols[BACK], nil, ZP);
 	if(t->what==Body && t->w->isdir && odx!=Dx(t->all)){
 		if(t->fr.maxlines > 0){
 			textreset(t);
@@ -82,7 +106,7 @@ textresize(Text *t, Rectangle r, int keepextra)
 	if(Dy(r) <= 0)
 		r.max.y = r.min.y;
 	else if(!keepextra)
-		r.max.y -= Dy(r)%t->fr.font->height;
+		r.max.y -= Dy(r)%t->fr.lineheight;
 	odx = Dx(t->all);
 	t->all = r;
 	t->scrollr = r;
@@ -372,8 +396,10 @@ textinsert(Text *t, uint q0, Rune *r, uint n, int tofile)
 	int c, i;
 	Text *u;
 
-	if(tofile && t->ncache != 0)
-		error("text.insert");
+	if(tofile && t->ncache != 0){
+		warning(nil, "text.insert: cache not empty");
+		typecommit(t);
+	}
 	if(n == 0)
 		return;
 	if(tofile){
@@ -406,8 +432,12 @@ textinsert(Text *t, uint q0, Rune *r, uint n, int tofile)
 		frinsert(&t->fr, r, r+n, q0-t->org);
 	if(t->what == Body && t->w && t->w->emphon){
 		emphshift(t->w, q0, n);
-		emphrefreshlocal(t->w, q0, q0 + n);
-		emphapplylocal(t->w, q0, q0 + n);
+		/*
+		 * Defer all emphasis re-search and re-apply to textcommit.
+		 * When tofile=FALSE the file is not updated (cache only).
+		 * When tofile=TRUE, large pastes would call this too many times,
+		 * corrupting ranges. Let textcommit handle it once.
+		 */
 	}
 	if(t->w){
 		c = 'i';
@@ -472,8 +502,10 @@ textdelete(Text *t, uint q0, uint q1, int tofile)
 	int i, c;
 	Text *u;
 
-	if(tofile && t->ncache != 0)
-		error("text.delete");
+	if(tofile && t->ncache != 0){
+		warning(nil, "text.delete: cache not empty");
+		typecommit(t);
+	}
 	n = q1-q0;
 	if(n == 0)
 		return;
@@ -516,8 +548,10 @@ textdelete(Text *t, uint q0, uint q1, int tofile)
 	}
 	if(t->what == Body && t->w && t->w->emphon){
 		emphshift(t->w, q0, -(int)(q1 - q0));
-		emphrefreshlocal(t->w, q0, q0);
-		emphapplylocal(t->w, q0, q0);
+		/*
+		 * Defer all emphasis re-search and re-apply to textcommit.
+		 * Like textinsert, let textcommit handle it once.
+		 */
 	}
 	if(t->w){
 		c = 'd';
@@ -720,7 +754,7 @@ texttype(Text *t, Rune r)
 	case Kpgdown:
 		n = 2*t->fr.maxlines/3;
 	case_Down:
-		q0 = t->org+frcharofpt(&t->fr, Pt(t->fr.r.min.x, t->fr.r.min.y+n*t->fr.font->height));
+		q0 = t->org+frcharofpt(&t->fr, Pt(t->fr.r.min.x, t->fr.r.min.y+n*t->fr.lineheight));
 		textsetorigin(t, q0, TRUE);
 		return;
 	case Kup:
@@ -957,10 +991,25 @@ texttype(Text *t, Rune r)
 void
 textcommit(Text *t, int tofile)
 {
+	uint q0, n;
+
 	if(t->ncache == 0)
 		return;
-	if(tofile)
-		fileinsert(t->file, t->cq0, t->cache, t->ncache);
+	q0 = t->cq0;
+	n = t->ncache;
+	if(tofile){
+		fileinsert(t->file, q0, t->cache, n);
+		t->ncache = 0;
+		/*
+		 * Now that the file reflects the typed characters, re-search
+		 * the local area for emphasis matches (deferred from textinsert
+		 * because tofile was FALSE at that point).
+		 */
+		if(t->what == Body && t->w && t->w->emphon){
+			emphrefreshlocal(t->w, q0, q0 + n);
+			emphapplylocal(t->w, q0, q0 + n);
+		}
+	}
 	if(t->what == Body){
 		t->w->dirty = TRUE;
 		t->w->utflastqid = -1;
@@ -1002,7 +1051,7 @@ textframescroll(Text *t, int dl)
 	}else{
 		if(t->org+t->fr.nchars == t->file->b.nc)
 			return;
-		q0 = t->org+frcharofpt(&t->fr, Pt(t->fr.r.min.x, t->fr.r.min.y+dl*t->fr.font->height));
+		q0 = t->org+frcharofpt(&t->fr, Pt(t->fr.r.min.x, t->fr.r.min.y+dl*t->fr.lineheight));
 		if(selectq > t->org+t->fr.p1)
 			textsetselect(t, t->org+t->fr.p1, selectq);
 		else
@@ -1701,20 +1750,27 @@ emphapply(Window *w)
 	if(w == nil || w->emphfont == nil)
 		return;
 	f = &w->body.fr;
-	emphclear(w);
-	if(!w->emphon || w->nemphmatch == 0)
+	if(f->b == nil || f->maxlines == 0)
 		return;
-	ef = w->emphfont->f;
-	vstart = w->body.org;
-	vend   = w->body.org + f->nchars;
-	for(i = 0; i < w->nemphmatch; i++){
-		m = &w->emphmatch[i];
-		if(m->q1 <= vstart) continue;
-		if(m->q0 >= vend) break;
-		p0 = (m->q0 < vstart) ? 0 : m->q0 - vstart;
-		p1 = (m->q1 > vend)   ? f->nchars : m->q1 - vstart;
-		frsetboxfont(f, p0, p1, ef);
+	emphclear(w);
+	if(w->emphon && w->nemphmatch > 0){
+		ef = w->emphfont->f;
+		vstart = w->body.org;
+		vend   = w->body.org + f->nchars;
+		for(i = 0; i < w->nemphmatch; i++){
+			m = &w->emphmatch[i];
+			if(m->q0 > m->q1)
+				continue;
+			if(m->q1 <= vstart) continue;
+			if(m->q0 >= vend) break;
+			p0 = (m->q0 < vstart) ? 0 : m->q0 - vstart;
+			p1 = (m->q1 > vend)   ? f->nchars : m->q1 - vstart;
+			if(p0 >= p1) continue;
+			frsetboxfont(f, p0, p1, ef);
+		}
 	}
+	frrelayout(f);
+	textfill(&w->body);
 }
 
 void
@@ -1726,13 +1782,68 @@ emphapplylocal(Window *w, uint q0, uint q1)
 		frredraw(&w->body.fr);
 }
 
-static char*
+char*
 emphfontname(Window *w)
 {
 	int fix;
 
 	fix = w != nil && strcmp(w->body.fr.font->name, fontnames[1]) == 0;
 	return fontnames[fix ? 3 : 2];
+}
+
+void
+winsetemphcolor(Window *w, ulong rgb)
+{
+	Image *i;
+
+	if(w == nil)
+		return;
+	i = allocimage(display, Rect(0,0,1,1), screen->chan, 1, rgb);
+	if(i == nil){
+		warning(nil, "emphcolor: cannot allocate image\n");
+		return;
+	}
+	if(w->emphcolor != nil)
+		freeimage(w->emphcolor);
+	w->emphcolor = i;
+	w->emphcolorrgb = rgb;
+	w->body.fr.cols[EMPH] = i;
+	frredraw(&w->body.fr);
+}
+
+void
+winresetemphcolor(Window *w)
+{
+	if(w == nil)
+		return;
+	if(w->emphcolor != nil){
+		freeimage(w->emphcolor);
+		w->emphcolor = nil;
+	}
+	w->body.fr.cols[EMPH] = textcols[EMPH];
+	frredraw(&w->body.fr);
+}
+
+void
+winensureemphfont(Window *w)
+{
+	char *fn;
+	Reffont *r;
+
+	if(w == nil)
+		return;
+	fn = w->emphfontpath ? w->emphfontpath : emphfontname(w);
+	if(w->emphfont != nil && strcmp(w->emphfont->f->name, fn) == 0)
+		return;
+	r = rfget(0, FALSE, FALSE, fn);
+	if(r == nil){
+		warning(nil, "EmphFont: cannot load font %s\n", fn);
+		return;
+	}
+	if(w->emphfont != nil)
+		rfclose(w->emphfont);
+	w->emphfont = r;
+	winresize(w, w->r, FALSE, TRUE);
 }
 
 void
@@ -1743,6 +1854,7 @@ setemph(Window *w, Rune *pat, int npat, int on)
 	if(!on){
 		w->emphon = FALSE;
 		emphapply(w);
+		textsetselect(&w->body, w->body.q0, w->body.q1);
 		frredraw(&w->body.fr);
 		textscrdraw(&w->body);
 		return;
@@ -1760,11 +1872,9 @@ setemph(Window *w, Rune *pat, int npat, int on)
 		return;
 	}
 	if(w->emphfont == nil){
-		char *fn = emphfontname(w);
-		w->emphfont = rfget(0, FALSE, FALSE, fn);
+		winensureemphfont(w);
 		if(w->emphfont == nil){
 			free(p);
-			warning(nil, "Emph: cannot load emphasis font %s\n", fn);
 			return;
 		}
 	}
@@ -1774,6 +1884,7 @@ setemph(Window *w, Rune *pat, int npat, int on)
 	w->emphon = TRUE;
 	emphrecompute(w);
 	emphapply(w);
+	textsetselect(&w->body, w->body.q0, w->body.q1);
 	frredraw(&w->body.fr);
 	textscrdraw(&w->body);
 }
@@ -1793,9 +1904,23 @@ emphrecompute(Window *w)
 	eof = t->file->b.nc;
 	p = 0;
 	while(p <= eof && rxexecute(t, nil, p, eof, &s)){
+		if(s.r[0].q1 > eof)
+			break;
 		emphpush(&w->emphmatch, &w->nemphmatch, &w->aemphmatch, s.r[0].q0, s.r[0].q1);
 		p = (s.r[0].q1 > s.r[0].q0) ? s.r[0].q1 : s.r[0].q0 + 1;
 	}
+}
+
+void
+emphrefresh(Window *w)
+{
+	if(w == nil || !w->emphon)
+		return;
+	emphrecompute(w);
+	emphapply(w);
+	textsetselect(&w->body, w->body.q0, w->body.q1);
+	frredraw(&w->body.fr);
+	textscrdraw(&w->body);
 }
 
 void
@@ -1871,26 +1996,128 @@ emphfree(Window *w)
 		rfclose(w->emphfont);
 		w->emphfont = nil;
 	}
+	free(w->emphfontpath);
+	w->emphfontpath = nil;
+	if(w->emphcolor != nil){
+		freeimage(w->emphcolor);
+		w->emphcolor = nil;
+	}
 }
 
 /* Reload the emphasis font to match the body font's mode (var/fixed). */
 void
 emphfontupdate(Window *w)
 {
-	char *fn;
-	Reffont *r;
-
 	if(w == nil || w->emphfont == nil)
 		return;
-	fn = emphfontname(w);
-	if(strcmp(w->emphfont->f->name, fn) == 0)
+	if(w->emphfontpath != nil)
+		return; /* pinned font: do not auto-switch on body font change */
+	winensureemphfont(w);
+}
+
+static Rune*
+fileext(Rune *name, int nname, int *plen)
+{
+	int i, j;
+
+	j = -1;
+	for(i = 0; i < nname; i++){
+		if(name[i] == '/')
+			j = -1;
+		else if(name[i] == '.')
+			j = i;
+	}
+	if(j >= 0){
+		*plen = nname - j - 1;
+		return name + j + 1;
+	}
+	*plen = 0;
+	return nil;
+}
+
+static Rune*
+emphpattern(char *ext)
+{
+	Biobuf *b;
+	char *home, *plan9, *path, *line, *start;
+	int extlen, patlen, i, linelen, nb, nr;
+	Rune *pat;
+
+	extlen = strlen(ext);
+	plan9 = getenv("PLAN9");
+	home = getenv("HOME");
+
+	for(i = 0; i < 2; i++){
+		if(i == 0){
+			if(plan9 == nil)
+				continue;
+			path = smprint("%s/lib/emph.regexp", plan9);
+		}else{
+			if(home == nil)
+				continue;
+			path = smprint("%s/lib/emph.regexp", home);
+		}
+
+		b = Bopen(path, OREAD);
+		free(path);
+		if(b == nil)
+			continue;
+
+		while((line = Brdline(b, '\n')) != nil){
+			linelen = Blinelen(b);
+			if(linelen > 0)
+				line[linelen-1] = 0;
+			if(line[0] == ext[0] && strncmp(line, ext, extlen) == 0 && line[extlen] == '='){
+				start = line + extlen + 1;
+				patlen = strlen(start);
+				pat = runemalloc(patlen + 1);
+				cvttorunes(start, patlen, pat, &nb, &nr, nil);
+				Bterm(b);
+				return pat;
+			}
+		}
+		Bterm(b);
+	}
+	return nil;
+}
+
+int
+emphbyext(Window *w)
+{
+	Rune *ext, *pat;
+	char *extstr;
+	int extlen, patlen, i;
+
+	if(w == nil || w->body.file == nil)
+		return 0;
+	ext = fileext(w->body.file->name, w->body.file->nname, &extlen);
+	if(ext == nil || extlen == 0)
+		return 0;
+
+	extstr = emalloc(extlen + 1);
+	for(i = 0; i < extlen; i++)
+		extstr[i] = ext[i];
+	extstr[extlen] = 0;
+
+	pat = emphpattern(extstr);
+	free(extstr);
+
+	if(pat == nil)
+		return 0;
+
+	patlen = runestrlen(pat);
+	setemph(w, pat, patlen, TRUE);
+	free(pat);
+	return 1;
+}
+
+void
+emphauto(Window *w)
+{
+	if(w == nil || !autoemph)
 		return;
-	r = rfget(0, FALSE, FALSE, fn);
-	if(r == nil)
+	if(w->emphon || w->emphpat != nil)
 		return;
-	rfclose(w->emphfont);
-	w->emphfont = r;
-	emphapply(w);
-	frredraw(&w->body.fr);
+	emphbyext(w);
 }
 

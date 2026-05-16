@@ -38,6 +38,8 @@ struct Frame
 	Image		*cols[NCOL];	/* text and background colors */
 	Rectangle	r;		/* in which text appears */
 	Rectangle	entire;		/* of full frame */
+	int		lineheight;	/* effective line height (>= font->height) */
+	int		ascent;		/* top-of-line to baseline distance */
 	void			(*scroll)(Frame*, int);	/* scroll function provided by application */
 	Frbox		*box;
 	ulong		p0, p1;		/* selection */
@@ -68,6 +70,7 @@ void	frsetrects(Frame*, Rectangle, Image*);
 void	frclear(Frame*, int);
 void	frredraw(Frame*);
 void	frsetboxfont(Frame*, ulong, ulong, Font*);
+void	frrelayout(Frame*);
 
 uchar	*_frallocstr(Frame*, unsigned);
 void	_frinsure(Frame*, int, unsigned);
@@ -97,6 +100,7 @@ void	frinittick(Frame*);
 #define	NRUNE(b)	((b)->nrune<0? 1 : (b)->nrune)
 #define	NBYTE(b)	strlen((char*)(b)->ptr)
 #define	FRBOXFONT(f,b)	((b)->font ? (b)->font : (f)->font)
+#define	FRBOXDY(f,b)	((f)->ascent - FRBOXFONT(f,b)->ascent)
 #if defined(__cplusplus)
 }
 #endif

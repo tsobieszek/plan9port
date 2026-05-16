@@ -41,10 +41,12 @@ char			*cputype;
 char			*objtype;
 char			*acmeshell;
 char			*emphcolorspec;
+ulong			emphglobalcolorrgb = 0x0000AAFF;	/* default dark blue (RRGGBBAA) */
 //char			*fontnames[2];
 extern char		wdir[]; /* must use extern because no dimension given */
 int			globalautoindent;
 int			dodollarsigns;
+int			autoemph;
 
 Channel	*cplumb;		/* chan(Plumbmsg*) */
 Channel	*cwait;		/* chan(Waitmsg) */

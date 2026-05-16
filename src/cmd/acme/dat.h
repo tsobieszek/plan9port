@@ -14,6 +14,7 @@ enum
 	QWaddr,
 	QWbody,
 	QWctl,
+	QWnctl,
 	QWdata,
 	QWeditout,
 	QWerrors,
@@ -238,12 +239,17 @@ void		emphfreearr(Range **m, int *n, int *a);
 /* emphasis functions - Window-aware */
 void		setemph(Window*, Rune *pat, int npat, int on);
 void		emphrecompute(Window*);
+void		emphrefresh(Window*);
 void		emphrefreshlocal(Window*, uint q0, uint q1);
 void		emphshift(Window*, uint q, int delta);
 void		emphfree(Window*);
 void		emphapply(Window*);
 void		emphapplylocal(Window*, uint q0, uint q1);
+char*		emphfontname(Window*);
 void		emphfontupdate(Window*);
+void		winensureemphfont(Window*);
+void		winsetemphcolor(Window*, ulong);
+void		winresetemphcolor(Window*);
 
 struct Window
 {
@@ -273,6 +279,9 @@ struct Window
 	int		nemphmatch;		/* used count */
 	int		aemphmatch;		/* allocated capacity */
 	Reffont	*emphfont;		/* per-window emphasis font (nil until first Emph) */
+	char	*emphfontpath;	/* explicit emphasis font path (nil => auto) */
+	Image	*emphcolor;		/* per-window emphasis color (nil => global default) */
+	ulong	emphcolorrgb;	/* RGB (RRGGBB, valid when emphcolor != nil) */
 	Column	*col;
 	Xfid		*eventx;
 	char		*events;
@@ -439,6 +448,7 @@ void		xfidclose(Xfid*);
 void		xfidread(Xfid*);
 void		xfidwrite(Xfid*);
 void		xfidctlwrite(Xfid*, Window*);
+void		xfidnctlwrite(Xfid*, Window*);
 void		xfideventread(Xfid*, Window*);
 void		xfideventwrite(Xfid*, Window*);
 void		xfidindexread(Xfid*);
@@ -572,6 +582,7 @@ extern char			*home;
 extern char			*acmeshell;
 extern char			*fontnames[4];
 extern char			*emphcolorspec;
+extern ulong			emphglobalcolorrgb;
 extern Image		*tagcols[NCOL];
 extern Image		*textcols[NCOL];
 extern char		wdir[]; /* must use extern because no dimension given */
@@ -580,6 +591,7 @@ extern int			erroutfd;
 extern int			messagesize;		/* negotiated in 9P version setup */
 extern int			globalautoindent;
 extern int			dodollarsigns;
+extern int			autoemph;
 extern char*		mtpt;
 
 enum

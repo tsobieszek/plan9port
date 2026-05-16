@@ -87,6 +87,8 @@ wininit(Window *w, Window *clone, Rectangle r)
 	w->emphmatch = nil;
 	w->nemphmatch = 0;
 	w->aemphmatch = 0;
+	w->emphfontpath = nil;
+	w->emphcolor = nil;
 	if(clone){
 		w->dirty = clone->dirty;
 		w->autoindent = clone->autoindent;
@@ -233,7 +235,7 @@ winresize(Window *w, Rectangle r, int safe, int keepextra)
 	r1.min.y = y;
 	if(!safe || !eqrect(w->body.all, r1)){
 		oy = y;
-		if(y+1+w->body.fr.font->height <= r.max.y){	/* room for one line */
+		if(y+1+w->body.fr.lineheight <= r.max.y){	/* room for one line */
 			r1.min.y = y;
 			r1.max.y = y+1;
 			draw(screen, r1, tagcols[BORD], nil, ZP);
@@ -375,6 +377,7 @@ winundo(Window *w, int isundo)
 			v->body.q0 = v->body.fr.p0+v->body.org;
 			v->body.q1 = v->body.fr.p1+v->body.org;
 		}
+		emphrefresh(v);
 	}
 	winsettag(w);
 }

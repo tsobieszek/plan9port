@@ -59,10 +59,14 @@ void	get(Text*, Text*, Text*, int, int, Rune*, int);
 void	put(Text*, Text*, Text*, int, int, Rune*, int);
 void	putfile(File*, int, int, Rune*, int);
 void	fontx(Text*, Text*, Text*, int, int, Rune*, int);
+void	emphfontx(Text*, Text*, Text*, int, int, Rune*, int);
+int	emphbyext(Window*);
+void	emphauto(Window*);
 #undef isalnum
 #define isalnum acmeisalnum
 int	isalnum(Rune);
 void	execute(Text*, uint, uint, int, Text*);
+void	typecommit(Text*);
 int	search(Text*, Rune*, uint, int);
 void	look3(Text*, uint, uint, int, int);
 void	editcmd(Text*, Rune*, uint);
