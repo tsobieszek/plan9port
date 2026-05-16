@@ -1,0 +1,13 @@
+Read: ./PLAN.md
+
+Verify the correctness of implementation of the latest done stage of the plan.
+(check what stage was done by reading from ./DONE)
+
+CHECK JUST THIS ONE STAGE
+
+The source code of acme this doc refers to is in `src/cmd/acme/` (see also src/cmd/acme/CLAUDE.md)
+If you need to you can read src/cmd/acme/src/cmd/acme/codebase_analysis.md
+and plan9port man pages like, `9 man 3 frame` or `9 man 4 acme` might be valuable.
+
+Update ./DONE to mark the given stage as verified
+

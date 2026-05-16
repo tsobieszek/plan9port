@@ -1,0 +1,10 @@
+Read @src/cmd/acme/src/cmd/acme/codebase_analysis.md for reference
+(see also src/cmd/acme/CLAUDE.md !)
+plan9port man pages like, `9 man 3 frame` or `9 man 4 acme` might be valuable.
+
+Read: ./PLAN.md
+
+Implement the next stage of the plan (check what stage was done by reading from ./DONE)
+JUST ONE STAGE - pause after this stage.
+Test the implementation.
+Save the done and tested (but not verified) stage to ./DONE

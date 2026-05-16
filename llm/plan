@@ -1,0 +1,9 @@
+@CODE_CHANGES.md @src/cmd/acme/codebase_analysis.md
+Other references that might be valueable:
+	* src/cmd/acme/CLAUDE.md
+	* plan9port man pages like, `9 man 3 frame` or `9 man 4 acme`
+
+Read ./TODO and prepare a meticulously detailed plan for the functionality to implement, test, or verify.
+
+Save the plan to: ./PLAN.md
+
