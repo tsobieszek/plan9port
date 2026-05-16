@@ -1,3 +1,9 @@
+### LOCAL CHANGES:
+Regexp-based emphasizing/highlighting of glyphs (face and colour). LLM-generated — expect some slop.
+
+
+------------
+
 This is a port of many Plan 9 libraries and programs to Unix.
 
 Installation
