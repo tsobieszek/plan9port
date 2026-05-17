@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Toujours répondre en français.** Code, identifiers, file content and
+program messages stay in English (no emojis). User-facing replies in
+French.
+
 ## What this is
 
 *Plan 9 from User Space* (plan9port): a Unix port of the Plan 9 libraries
@@ -16,6 +20,25 @@ chain). For the `acme` editor specifically, read
 This tree diverges from upstream — **`CODE_CHANGES.md`** documents the
 locally-added emphasis feature in acme (a per-box-font extension of
 `libframe`).
+
+Two sibling directories carry assets that are not built by the root
+`./INSTALL` and so are easily missed:
+
+- **`llm/`** — Claude Code skills (`acme/SKILL.md` for driving acme
+  via `/mnt/acme`; `rc/SKILL.md` for plan9port `rc` shell scripting
+  and its `test`/`sed`/`awk`/`grep` flavours). Both installed via
+  `cd llm && mk install`, plus prompt templates (`plan`, `implement`,
+  `verify`) and the live `TODO`.
+- **`scripts/`** — rc scripts run from the acme tag to drive font,
+  size, weight, color and emphasis (`A`, `F`, `Bold`, `Color`,
+  `EmphAs`, …). Installed into `$HOME/acme/` with
+  `cd scripts && mk install`. They are the worked examples for both
+  `llm/acme/SKILL.md` and `llm/rc/SKILL.md`.
+
+**`./OBSERVATIONS.md`** records the cross-check between
+`llm/acme/SKILL.md` and the code (man-page gaps, undocumented `ctl` verbs,
+script fragility for whitespaced font paths). Read it before patching
+`man/man4/acme.4` or extending the emphasis surface.
 
 ## Build / run
 
@@ -68,8 +91,11 @@ the semantics of a library function or a tool, consult it:
 
 ```
 9 man <section> <name>      # e.g. 9 man 3 draw, 9 man 9 9p
-9 man -k <keyword>          # search by topic
 ```
+
+Plan9port's `man` does not support `-k` (it just prints usage). To
+search by topic, `ls $PLAN9/man/manN | grep <kw>` or read
+`man/man1/0intro.1`.
 
 Sections: 1 (commands), 3 (C library APIs), 4 (file-server interfaces,
 incl. 9P services), 7 (file formats / conventions), 8 (admin), 9 (Plan 9
@@ -105,5 +131,25 @@ install; sources are under `man/`.
 - This tree is not vanilla plan9port. Before sending anything upstream,
   check the local drift (some directories provide an `mk diffplan9`
   target; `acme` does).
-- Toujours répondre en français, SVP.
+
+## Driving acme from scripts — two absolute rules
+
+These apply whenever a script (or another program) talks to a live acme
+over `/mnt/acme`:
+
+- **Never write `dirty` or `clean` to a `ctl` file from an outside
+  script.** Both verbs are reserved for the owning controller (e.g.
+  `win`). `clean` in particular calls `filereset` and wipes the
+  window's undo/redo history. Use `put` if a script needs to make a
+  window clean honestly.
+- **Never mutate the body of a dirty window.** Check field 5 of
+  `acme/<id>/ctl` (or of the matching `acme/index` line) — `1` is
+  dirty — and skip or warn rather than writing through `body`, `data`,
+  or `Edit`.
+
+Full reference: **`llm/acme/SKILL.md`** (catalogue of every `ctl`/`nctl`
+verb, the `event` protocol, idioms, and where the man pages still
+diverge from the code). For the `rc` shell itself and the p9p tools
+those scripts compose (`test`, `awk`, `sed`, `grep`, `regexp(7)`),
+see **`llm/rc/SKILL.md`**.
 

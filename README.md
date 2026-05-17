@@ -1,6 +1,14 @@
 ### LOCAL CHANGES:
 Regexp-based emphasizing/highlighting of glyphs (face and colour). LLM-generated — expect some slop.
 
+This extended acme also adds the built-in commands `Emph`, `EmphMe`,
+`EmphAll`, `EmphNone`, `EmphFont` and `AutoEmph` (see acme(1)). Several complementary
+acme commands shipped as scripts live in `scripts/`; see
+`scripts/README.md`.
+
+	> TODO Note: Some if not all of these built-in commands should be
+	> converted to scripts.
+
 
 ------------
 
