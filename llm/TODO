@@ -1,0 +1,16 @@
+create scripts:
+All of `Emph`, `EmphFont`, `EmphMe`, `EmphNone`, `EmphAll`, `EmphFont` should be converted to Plan9 rc scripts in /usr/local/plan9/scripts/ (chmod +x) NOT `AutoEmph`
+lib/emph.regexp needs to be moved to
+The built in functionality needs to be removed.
+	Run `9 man 1 rc` as it differs from sh shells! (Plan9 also has different conventions for `test`, `awk`, `sed`, `grep`, …)
+	See also existing scripts in scripts/ for reference (e.g. scripts/Color and scripts/ColorAll)
+mk install inside scripts should install scripts to ~/acme/	(chmod +x) and emph.regexp to ~/lib/ (the scripts should be aware of this location)
+A brief README.md should be added to scripts/ (this directory will be moved to a separate project and should refer to git:tsobieszek/plan9port)
+
+Note that new the functionality needs to be exposed via `nctl` files — for instance to support EmphMe, EmphNone, EmphAll — when reading from nctl there should be a new field (3rd I guess) that should show a 0/1 toggle state — whether Emph is off/on for the given acme window.
+Do not change existing conventions regarding `nctl` files. Do not touch `ctl` files.
+
+EmphFont functionality needs to be updated:
+	parse the current font from the `nctl` file (1st field I guess) and assign it to $curremphfont, extract the $sizespec see (../scripts/A)
+	then take the list of: $curremphfont, $font, $varfont, $emphfont, $varemphfont, (stripping null/empty ones)
+		sort it uniquely and take the next element cyclicly after $curremphfont, however convert/match it's sizespec to the $sizespec
