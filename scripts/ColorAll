@@ -1,0 +1,39 @@
+#!/usr/local/plan9/bin/rc
+ctlfile=acme/$winid/nctl
+
+# 1af → 11aaff
+fn expandcolor {
+	len=`{expr length $1}
+	if (~ $len 3)
+		echo $1 | awk '{split($0,c,""); print c[1]c[1]c[2]c[2]c[3]c[3]}'
+	if not
+		echo $1
+}
+
+# If arg present, use it as ncolor; otherwise toggle between $color and $varcolor
+if (! ~ $1 '')
+	ncolor=$1
+if not {
+	# Verify colors are defined
+	if (~ $color '' || ~ $varcolor '') {
+		exit
+	}
+	# Read current color
+	ctl=`{9p read $ctlfile}
+	oldcolor=`{echo $ctl | awk '{print $2}'}
+
+	# Expand 3-char colors to 6-char format
+	varcolor=`{expandcolor $varcolor}
+
+	# Toggle
+	if (~ $oldcolor $varcolor)
+		ncolor=$color
+	if not
+		ncolor=$varcolor
+}
+
+
+for(winid in `{9p read acme/index | awk '{print $1}'}) {
+	ctlfile=acme/$winid/nctl
+	echo emphcolor $ncolor | 9p write $ctlfile
+}

@@ -1,0 +1,33 @@
+# Standalone mkfile for the acme font/emphasis scripts.
+# Not included from the root build: neither `./INSTALL` nor the
+# top-level `mk install` descend into this directory.
+
+ACMEDIR=$HOME/acme
+
+SCRIPTS=\
+	A\
+	A+\
+	A-\
+	Bold\
+	BoldAll\
+	Color\
+	ColorAll\
+	EmphAs\
+	F\
+	F+\
+	F-\
+	T\
+
+install:V:
+	mkdir -p $ACMEDIR
+	for i in $SCRIPTS
+	do
+		cp $i $ACMEDIR/$i
+		chmod +x $ACMEDIR/$i
+	done
+
+uninstall:V:
+	for i in $SCRIPTS
+	do
+		rm -f $ACMEDIR/$i
+	done

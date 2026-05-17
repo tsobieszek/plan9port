@@ -1,0 +1,38 @@
+#!/usr/local/plan9/bin/rc
+
+if (~ $1 '')
+	newsize=`{echo $font | awk -F/ '{print $5}' | tr -d a}
+if not
+	newsize=$1
+
+if (! ~ $antialias_threshold '')
+	antialias_threshold=$antialias_threshold
+if not
+	antialias_threshold=16
+
+fn adjust_font {
+	ctlfile=$1
+	fontfld=$2
+	cmd=$3
+
+	ctl=`{9p read $ctlfile}
+	if (! ~ $ctl '') {
+		font=`{echo $ctl | awk '{print $'$fontfld'}'}
+		sizespec=`{echo $font | awk -F/ '{print $5}'}
+
+		if (test $newsize -ge $antialias_threshold)
+			newsizespec=$newsize^a
+		if not
+			newsizespec=$newsize
+
+		newfont=`{echo $font | sed 's|'$sizespec'|'$newsizespec'|g'}
+		echo $cmd $newfont | 9p write $ctlfile >[2]/dev/null
+	}
+}
+
+for(id in `{9p read acme/index | awk '{print $1}'}) {
+	adjust_font acme/$id/ctl 7 font
+	adjust_font acme/$id/nctl 1 emphfont
+}
+adjust_font acme/ctl 1 font
+true

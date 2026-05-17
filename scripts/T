@@ -1,0 +1,58 @@
+#!/usr/local/plan9/bin/rc
+
+fn samfile_dir {
+	# Resolve samfile to absolute path if relative
+	if (! ~ $samfile /*)
+		samfile=`{pwd}/$samfile
+
+	isdir=`{9p read acme/$winid/ctl | awk '{print $4}'}
+	if (~ $isdir 1)
+		echo $samfile | sed 's|/*$||'
+	if not {
+		d=`{echo $samfile | sed 's|/[^/]*$||'}
+		if (~ $d '')
+			echo /
+		if not
+			echo $d
+	}
+}
+
+fn find_win {
+	9p read acme/index | awk -v d=$1/ 'NF>=6 && $6==d {print $1; exit}'
+}
+
+fn open_win {
+	id=`{9p read acme/new/ctl | awk '{print $1}'}
+	echo 'name '$1/ | 9p write acme/$id/ctl >[2]/dev/null
+	echo $id
+}
+
+fn fill_win {
+	awk 'BEGIN{printf "0,$"}' | 9p write acme/$1/addr
+	tree -F --prune --filesfirst --noreport -fnNF --compress=2 . | sed s,├─,├⎯, | 9p write acme/$1/data
+	# Intentional: generated display window; wiping undo history is acceptable.
+	echo clean | 9p write acme/$1/ctl >[2]/dev/null
+}
+
+if (~ $1 '') {
+	if (~ $samfile '') {
+		echo 'T: no file in current window' >[1=2]
+		exit nofile
+	}
+	dir=`{samfile_dir}
+}
+if not {
+	if (! test -d $1) {
+		echo 'T: '$1^': not a directory' >[1=2]
+		exit notdir
+	}
+	dir=`{echo $1 | sed 's|/*$||'}
+}
+
+tid=`{find_win $dir}
+if (~ $tid '')
+	tid=`{open_win $dir}
+
+builtin cd $dir
+fill_win $tid $dir
+winid=$tid EmphAs dir

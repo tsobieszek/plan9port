@@ -1,0 +1,60 @@
+#!/usr/local/plan9/bin/rc
+
+fn is_bold {
+	echo $1 | grep -e '-Bold' >/dev/null
+}
+
+fn to_nonbold {
+	fontpath=$1
+	newpath=`{echo $fontpath | sed 's/-Bold//'}
+	{test -f $newpath && echo $newpath} || \
+	{newpath=`{echo $fontpath | sed 's/-Bold/-Regular/'} && test -f $newpath && echo $newpath} || \
+	{newpath=`{echo $fontpath | sed 's/-Bold/-Medium/'} && test -f $newpath && echo $newpath}
+}
+
+fn to_bold {
+	fontpath=$1
+	if (echo $fontpath | grep -e '-Regular' >/dev/null) {
+		newpath=`{echo $fontpath | sed 's/-Regular/-Bold/'}
+		test -f $newpath && echo $newpath
+	}
+	if not {
+		if (echo $fontpath | grep -e '-Medium' >/dev/null) {
+			newpath=`{echo $fontpath | sed 's/-Medium/-Bold/'}
+			test -f $newpath && echo $newpath
+		}
+		if not {
+			fontstr=`{echo $fontpath | awk -F/ '{print $4}'}
+			newpath=`{echo $fontpath | sed 's|'$fontstr'|'$fontstr'-Bold|'}
+			test -f $newpath && echo $newpath
+		}
+	}
+}
+
+fn apply {
+	id=$1
+	ctlfile=acme/$id/nctl
+	ctl=`{9p read $ctlfile}
+	wfont=`{echo $ctl | awk '{print $1}'}
+	if (~ $target bold)
+		destfont=`{to_bold $wfont}
+	if not
+		destfont=`{to_nonbold $wfont}
+	if (! ~ $#destfont 0)
+		echo emphfont $destfont | 9p write $ctlfile >[2]/dev/null
+}
+
+if (! ~ $1 '')
+	target=$1
+if not {
+	ctlfile=acme/$winid/nctl
+	ctl=`{9p read $ctlfile}
+	font=`{echo $ctl | awk '{print $1}'}
+	if (is_bold $font)
+		target=plain
+	if not
+		target=bold
+}
+
+for(id in `{9p read acme/index | awk '{print $1}'})
+	apply $id
