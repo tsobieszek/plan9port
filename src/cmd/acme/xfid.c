@@ -285,6 +285,64 @@ xfidclose(Xfid *x)
 	respond(x, &fc, nil);
 }
 
+static void
+xfidglobalctlread(Xfid *x)
+{
+	Fcall fc;
+	char *b;
+	int n;
+	uint off;
+
+	b = smprint("%s\n%s\n", fontnames[0], fontnames[1]);
+	n = strlen(b);
+	off = x->fcall.offset;
+	if(off > (uint)n)
+		off = n;
+	if(off+x->fcall.count > (uint)n)
+		x->fcall.count = n-off;
+	fc.count = x->fcall.count;
+	fc.data = b+off;
+	respond(x, &fc, nil);
+	free(b);
+}
+
+static void
+xfidglobalctlwrite(Xfid *x)
+{
+	Fcall fc;
+	char *p, *nl;
+	int fix;
+	static char *envnames[2] = { "font", "varfont" };
+
+	p = x->fcall.data;
+	fix = -1;
+	if(strncmp(p, "font ", 5) == 0){
+		p += 5;
+		fix = 0;
+	}else if(strncmp(p, "varfont ", 8) == 0){
+		p += 8;
+		fix = 1;
+	}
+	if(fix < 0){
+		respond(x, &fc, Ebadctl);
+		return;
+	}
+	nl = strchr(p, '\n');
+	if(nl)
+		*nl = 0;
+	if(*p == 0){
+		respond(x, &fc, Ebadctl);
+		return;
+	}
+	if(rfget(fix, TRUE, fix==0, p) == nil){
+		respond(x, &fc, "font not found");
+		return;
+	}
+	putenv(envnames[fix], fontnames[fix]);
+	fc.count = x->fcall.count;
+	respond(x, &fc, nil);
+}
+
 void
 xfidread(Xfid *x)
 {
@@ -308,6 +366,9 @@ xfidread(Xfid *x)
 			return;
 		case Qlog:
 			xfidlogread(x);
+			return;
+		case Qctl:
+			xfidglobalctlread(x);
 			return;
 		default:
 			warning(nil, "unknown qid %d\n", q);
@@ -490,6 +551,10 @@ xfidwrite(Xfid *x)
 	case Qlabel:
 		fc.count = x->fcall.count;
 		respond(x, &fc, nil);
+		break;
+
+	case Qctl:
+		xfidglobalctlwrite(x);
 		break;
 
 	case QWaddr:

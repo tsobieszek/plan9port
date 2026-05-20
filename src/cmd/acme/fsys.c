@@ -68,6 +68,7 @@ Dirtab dirtab[]=
 	{ "acme",		QTDIR,	Qacme,	0500|DMDIR },
 	{ "cons",		QTFILE,	Qcons,	0600 },
 	{ "consctl",	QTFILE,	Qconsctl,	0000 },
+	{ "ctl",		QTFILE,	Qctl,		0600 },
 	{ "draw",		QTDIR,	Qdraw,	0000|DMDIR },	/* to suppress graphics progs started in acme */
 	{ "editout",	QTFILE,	Qeditout,	0200 },
 	{ "index",		QTFILE,	Qindex,	0400 },

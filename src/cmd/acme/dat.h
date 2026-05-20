@@ -10,6 +10,7 @@ enum
 	Qlabel,
 	Qlog,
 	Qnew,
+	Qctl,
 
 	QWaddr,
 	QWbody,

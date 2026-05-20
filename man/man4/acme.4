@@ -78,6 +78,28 @@ is an empty unwritable file present only for compatibility; there is no way
 to turn off `echo', for example, under
 .IR acme .
 .TP
+.B ctl
+may be read to return two lines: the name of the current variable-width font
+and the name of the current fixed-width font.
+Text messages may be written to
+.B ctl
+to change the global default fonts used for new windows.
+.IP
+.B "font \fIpath\fR"
+sets the variable-width font to
+.IR path ,
+updates the
+.B $font
+environment variable, and applies
+.I path
+as the default font for subsequently created windows.
+.IP
+.B "varfont \fIpath\fR"
+sets the fixed-width font to
+.I path
+and updates
+.BR $varfont .
+.TP
 .B index
 holds a sequence of lines of text, one per window.  Each line has 5 decimal numbers,
 each formatted in 11 characters plus a blank\(emthe window ID;

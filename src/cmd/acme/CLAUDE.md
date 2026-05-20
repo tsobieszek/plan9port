@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Source of the `acme` editor (Plan 9 / plan9port port). C, Plan 9 style, multithreaded via `libthread`. Acme exposes its windows as a 9P filesystem (`cons`, `index`, `log`, `new/`, and per-window `addr`, `body`, `tag`, `ctl`, `nctl`, `data`, `event`, `xdata`, `errors`, `editout`). External programs drive the editor by reading/writing these virtual files. The authoritative reference for that interface is `man/man4/acme.4` (or `9 man 4 acme`). Note: emphasis-related verbs (`emph=`, `noemph`, `emphfont`) live in `nctl`, not `ctl`.
+Source of the `acme` editor (Plan 9 / plan9port port). C, Plan 9 style, multithreaded via `libthread`. Acme exposes its windows as a 9P filesystem. Root-level files: `cons`, `ctl` (global font control), `index`, `log`, `new/`. Per-window: `addr`, `body`, `tag`, `ctl`, `nctl`, `data`, `event`, `xdata`, `errors`, `editout`. External programs drive the editor by reading/writing these virtual files. The authoritative reference for that interface is `man/man4/acme.4` (or `9 man 4 acme`). Note: emphasis-related verbs (`emph=`, `noemph`, `emphfont`) live in `nctl`, not `ctl`.
 
 ## Build / run
 
