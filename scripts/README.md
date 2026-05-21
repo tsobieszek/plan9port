@@ -82,6 +82,12 @@ affected window(s).
 | `Color`     | Toggle the current window's emphasis color between `$color` and `$varcolor` | Use the argument as the color (hex; 3-char shorthand such as `1af` is expanded to `11aaff`) |
 | `ColorAll`  | Same toggle, applied to every window | Same, applied to every window |
 
+### Diff against disk
+
+| Script | Effect |
+|--------|--------|
+| `Meld` | Copy the current window's body to a temporary file and open `meld` on that file and `$samfile` (the on-disk version). Waits until meld exits, then deletes the temporary file. Most useful on dirty windows to review unsaved changes before saving. |
+
 ### Tree view
 
 | Script | Without argument | With argument `dir` |

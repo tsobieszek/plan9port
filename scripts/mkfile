@@ -16,6 +16,7 @@ SCRIPTS=\
 	F\
 	F+\
 	F-\
+	Meld\
 	T\
 
 install:V:
