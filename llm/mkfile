@@ -23,7 +23,7 @@ install:V:	install-skill install-bin install-command register-hook
 
 install-skill:V:
 	mkdir -p $SKILLDIR
-	cp SKILL.md $SKILLDIR/SKILL.md
+	cp acme/SKILL.md $SKILLDIR/SKILL.md
 
 install-bin:V:
 	mkdir -p $BINDIR

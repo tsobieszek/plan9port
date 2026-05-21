@@ -2,7 +2,7 @@
 
 LLM-facing assets for this tree. Three layers:
 
-- **`SKILL.md`** — Claude Code skill describing acme's 9P control
+- **`acme/SKILL.md`** — Claude Code skill describing acme's 9P control
   surface (`/mnt/acme`), ctl/nctl verbs, the `event` protocol, rc-script
   conventions, and the absolute rules ("never write `dirty`/`clean` to
   `ctl`", "never mutate a dirty window"). Source of truth for any new
@@ -39,7 +39,7 @@ invalid JSON.
 This `mkfile` is standalone: neither `./INSTALL` at the tree root nor
 `mk install` from the root descend here.
 
-## When to update SKILL.md
+## When to update acme/SKILL.md
 
 - Whenever a new `ctl` or `nctl` verb is added or removed in
   `src/cmd/acme/xfid.c`, update the verb list.
@@ -50,7 +50,7 @@ This `mkfile` is standalone: neither `./INSTALL` at the tree root nor
 - Whenever the hook's behaviour changes (`bin/acme-update`), keep the
   "Auto-syncing acme with Claude Code edits" section in step.
 
-Keep paths in `SKILL.md` project-relative so the file stays portable
+Keep paths in `acme/SKILL.md` project-relative so the file stays portable
 when this directory is split into its own repo (per the `scripts/`
 README note).
 

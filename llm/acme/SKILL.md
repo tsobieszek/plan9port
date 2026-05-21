@@ -22,7 +22,7 @@ The authoritative references are the man pages:
   protocol.
 
 Read them when in doubt. What follows summarises the parts a scripter touches
-most. The example scripts that ship in the sibling `scripts/` directory
+most. The example scripts that ship in `$PLAN9/scripts/`
 (`A`, `A+`, `A-`, `F`, `F+`, `F-`, `Bold`, `BoldAll`, `Color`, `ColorAll`,
 `EmphAs`) demonstrate every idiom listed below; they are the best starting
 templates.
@@ -36,8 +36,9 @@ These come up often enough to be lifted out of the rest.
   (e.g. `win`, `mail/`) and uses them to project its own notion of
   dirtiness. From an outside script they desynchronise acme's flag from the
   buffer's real state. Concretely, writing `clean` calls `filereset` in
-  `file.c` — it **wipes the window's undo and redo history** and clears the
-  modified bit, so the user loses both their Ctrl-Z stack and the visual
+  `$PLAN9/src/cmd/acme/file.c` — it **wipes the window's undo and redo
+  history** and clears the modified bit, so the user loses both their Ctrl-Z
+  stack and the visual
   warning that the buffer is unsaved. Writing `dirty` does the opposite:
   it marks a clean buffer as modified, so `Del` refuses on the first try
   and the user has no real change to save. Acme manages this flag itself.
@@ -107,7 +108,8 @@ Inside a command spawned by acme, useful environment variables are pre-set:
 - `$tabstop`, `$PLAN9`, `$home`.
 
 The local emphasis feature adds (per-window) the `nctl` file with the verbs
-`emph=`, `noemph`, `emphfont`, `emphcolor` (see acme(4) and CODE_CHANGES.md).
+`emph=`, `noemph`, `emphfont`, `emphcolor` (see `9 man 4 acme` and
+`$PLAN9/CODE_CHANGES.md`).
 **Emphasis-related verbs go to `nctl`, never to `ctl`.**
 
 ## File catalogue
@@ -118,7 +120,7 @@ The local emphasis feature adds (per-window) the `nctl` file with the verbs
 |---|---|---|
 | `tag` | tag text | append (file offset ignored) |
 | `body` | body text | append (file offset ignored) |
-| `addr` | the current addr as **two fixed-width 11-char rune offsets `q0 q1`** (not `#m,#n` — the man page is wrong; verify in `xfid.c:391`) | set address — line numbers, regex, sam-style compound addresses |
+| `addr` | the current addr as **two fixed-width 11-char rune offsets `q0 q1`** (not `#m,#n` — the man page is wrong; verify in `$PLAN9/src/cmd/acme/xfid.c:391`) | set address — line numbers, regex, sam-style compound addresses |
 | `data` | text from addr onward, count-bounded; **advances addr to the end of what was read** | replace text at addr with the bytes written; addr advances likewise |
 | `xdata` | as `data` but reads stop at the end of `addr` and do not advance it | same |
 | `ctl` | a single line, no trailing newline: 10 fields — `id ntag nbody isdir isdirty width font tabwidth undo redo`. First 5 are fixed-width `%11d ` (so byte offsets 0, 12, 24, 36, 48); the font field is Plan 9 `%q`-quoted (wrapped in single quotes if it contains whitespace or specials) | one verb per line (see below) |
@@ -169,7 +171,7 @@ Documented in `acme(4)`:
 `put` — `Put` ·
 `show` — scroll to make the selection visible.
 
-Implemented in `xfid.c:xfidctlwrite` but **not in the man page**:
+Implemented in `$PLAN9/src/cmd/acme/xfid.c:xfidctlwrite` but **not in the man page**:
 
 `lock` — take exclusive control of the `ctl` file (other writers block on
 `w->ctllock` until released) ·
@@ -224,15 +226,25 @@ echo 'hello' | 9p write acme/$winid/body
 To **replace** existing content you must go through `addr` + `data` (writing to
 `body` always appends). The `addr` file accepts any sam-style address:
 
+**Critical:** the `addr` file parser (`address()` in `addr.c`) validates
+that every byte written is a legal address character
+(`isaddrc`: `0-9 + - / $ . # , ; ?`). A trailing newline — which `echo`
+always appends — is **not** a legal address character. When the parser
+stops before consuming the newline, `nb < nr` and acme returns
+`"bad address syntax"`. The subsequent `data` write then falls on
+whatever `addr` was before (often `0,0`), silently prepending instead of
+replacing. **Always write addresses without a trailing newline**, using
+`awk 'BEGIN{printf "…"}'`:
+
 ```rc
 # Replace the whole body with the output of `date`
-echo , | 9p write acme/$winid/addr           # whole-file selection
+awk 'BEGIN{printf "0,$"}' | 9p write acme/$winid/addr
 date | 9p write acme/$winid/data
 ```
 
 ```rc
 # Replace lines 3..5 in the current window
-echo '3,5' | 9p write acme/$winid/addr
+awk 'BEGIN{printf "3,5"}' | 9p write acme/$winid/addr
 echo 'replacement text' | 9p write acme/$winid/data
 ```
 
@@ -378,7 +390,8 @@ This is the standard idiom for an event-driven controller: read an event,
 decide whether to intercept it, and on accept ack it back to acme.
 
 For non-trivial controllers prefer a higher-level library that parses all
-of this for you: C `libacme` (`include/acme.h`) or Go `9fans.net/go/acme`.
+of this for you: C `libacme` (`$PLAN9/include/acme.h`) or Go
+`9fans.net/go/acme`.
 The rc-level interface above is fine for quick filters but quickly turns
 unwieldy.
 
@@ -401,8 +414,8 @@ See `9 man 7 plumb` (format) and `9 man 4 plumber` (file server).
 ## Writing rc scripts for acme
 
 Place scripts in `$HOME/acme/` (or anywhere on `$PATH`); they appear as
-button-2 commands typed in any tag. Conventions used by every script in this
-directory:
+button-2 commands typed in any tag. Conventions used by every script in
+`$PLAN9/scripts/`:
 
 - Shebang `#!/usr/local/plan9/bin/rc`.
 - Read configuration from the **environment**, never from a config file:
@@ -465,7 +478,7 @@ User commands (button-2 on a word in the tag) — full list in `9 man 1 acme`:
 `Putall`, `Del`, `Delete`, `Delcol`, `New`, `Newcol`, `Send`, `Sort`, `Tab`,
 `Zerox`, `Dump`, `Load`, `Exit`, `Font`, `Indent`, `Incl`, `Kill`.
 
-Emphasis (local to this tree, see `man/man1/acme.1`):
+Emphasis (local to this tree, see `$PLAN9/man/man1/acme.1`):
 
 `Emph [regex]`, `EmphMe`, `EmphAll`, `EmphNone`, `EmphFont [path]`,
 `AutoEmph`. The rc script `EmphAs <lang>` extends this by looking up
@@ -489,7 +502,7 @@ Copy/cut selection to a file (idiomatic):
 
 Not for scripting; for investigating bugs inside the editor's C source.
 Plan9port ships `acid` and `acidtypes`, but **this tree's
-`src/cmd/acme/mkfile` has no `syms` / `acme.acid` targets** (the example
+`$PLAN9/src/cmd/acme/mkfile` has no `syms` / `acme.acid` targets** (the example
 recipes from upstream Plan 9 docs do not apply as-is). Procedure here:
 
 ```
@@ -517,17 +530,17 @@ online.)
 ## Auto-syncing acme with Claude Code edits
 
 This skill ships a PostToolUse hook so that an acme session stays in sync
-with what Claude has changed on disk. Installed by `cd llm && mk install`
-(under this tree); the moving parts are:
+with what Claude has changed on disk. Installed by `cd $PLAN9/llm && mk install`;
+the moving parts are:
 
 | Path | Role |
 |---|---|
 | `~/.claude/skills/acme/bin/acme-update` | rc script. Hook mode reads the event JSON on stdin; manual mode takes `FILE [TOOL]`. |
 | `~/.claude/skills/acme/bin/acme-sync-recent` | Iterates `git diff --name-only HEAD` + untracked files, calls `acme-update` on each. Backbone of the slash command. |
 | `~/.claude/commands/update-acme.md` | Slash command `/update-acme` — runs the manual driver. |
-| `~/.claude/settings.json` | Carries the `PostToolUse` matcher for `Edit\|Write\|MultiEdit\|NotebookEdit` → `acme-update`, written by `install-hook.rc`. |
+| `~/.claude/settings.json` | Carries the `PostToolUse` matcher for `Edit\|Write\|MultiEdit\|NotebookEdit` → `acme-update`, written by `$PLAN9/llm/install-hook.rc`. |
 
-Per-file behaviour, in priority order (see `bin/acme-update`):
+Per-file behaviour, in priority order (see `$PLAN9/llm/bin/acme-update`):
 
 1. Acme not reachable, or `jq` missing — silent no-op (exit 0).
 2. Existing window with this file (tag's first whitespace-separated token
@@ -577,19 +590,20 @@ overwrite the live file if the merge result is not valid JSON.
 - No emojis anywhere.
 - Functional, short rc functions. One responsibility each. Compose.
 - Match the surrounding code style when editing a script.
-- When adding or removing a script in `scripts/`, update both `SCRIPTS=` in
-  `scripts/mkfile` and the tables in `scripts/README.md`.
+- When adding or removing a script in `$PLAN9/scripts/`, update both
+  `SCRIPTS=` in `$PLAN9/scripts/mkfile` and the tables in
+  `$PLAN9/scripts/README.md`.
 - The man pages — `9 man 1 acme`, `9 man 4 acme`, `9 man 7 plumb`,
   `9 man 1 sam` — are the source of truth for any verb, address, or message
   format. Consult them before guessing.
 
 ## Pointers to companion docs
 
-- `scripts/README.md` — every shipped script, with usage tables.
-- `src/cmd/acme/CLAUDE.md` — guidance when editing acme's C source.
-- `src/cmd/acme/codebase_analysis.md` — internals: data stack, ctl/nctl
+- `$PLAN9/scripts/README.md` — every shipped script, with usage tables.
+- `$PLAN9/src/cmd/acme/CLAUDE.md` — guidance when editing acme's C source.
+- `$PLAN9/src/cmd/acme/codebase_analysis.md` — internals: data stack, ctl/nctl
   dispatch, emphasis pipeline.
-- `CODE_CHANGES.md` (tree root) — local divergence from upstream plan9port
+- `$PLAN9/CODE_CHANGES.md` — local divergence from upstream plan9port
   (emphasis feature).
-- `lib/emph.regexp` — language → pattern mapping used by `EmphMe`,
+- `$PLAN9/lib/emph.regexp` — language → pattern mapping used by `EmphMe`,
   `EmphAll`, `AutoEmph`, and `EmphAs`.

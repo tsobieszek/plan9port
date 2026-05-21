@@ -6,7 +6,7 @@ LLM-facing assets for this tree.
 
 | File | Purpose |
 |---|---|
-| `SKILL.md` | Claude Code skill: how to drive a live acme via 9P and write rc scripts for it. Authoritative on the ctl/nctl/event surface and the hard rules (no `dirty`/`clean` writes; no mutation of dirty windows). |
+| `acme/SKILL.md` | Claude Code skill: how to drive a live acme via 9P and write rc scripts for it. Authoritative on the ctl/nctl/event surface and the hard rules (no `dirty`/`clean` writes; no mutation of dirty windows). |
 | `bin/acme-update` | PostToolUse hook + manual single-file sync helper. Reloads the matching acme window when Claude edits a file (clean windows only; dirty ones get a warning in `+Errors`). |
 | `bin/acme-sync-recent` | Walks `git diff --name-only HEAD` + untracked files and calls `acme-update` on each. The body of the `/update-acme` slash command. |
 | `commands/update-acme.md` | Slash command `/update-acme` for manual sync (fallback when the hook is disabled). |
@@ -47,6 +47,8 @@ each install target.
         └── acme-sync-recent
 ```
 
+Note: `SKILL.md` is copied from `acme/SKILL.md` in the tree.
+
 Requirements: `jq` (for the settings merge) and `9p` (plan9port). The
 hook itself exits 0 silently when either is unavailable, so it never
 breaks Claude Code; the install merely complains and prints a snippet
@@ -57,7 +59,7 @@ do not descend into this directory.
 
 ## See also
 
-- `scripts/` — the rc scripts SKILL.md uses as worked examples (`A`,
+- `scripts/` — the rc scripts `acme/SKILL.md` uses as worked examples (`A`,
   `F`, `Bold`, `Color`, `EmphAs`, …).
 - `src/cmd/acme/` — acme's C source, `CLAUDE.md`, and
   `codebase_analysis.md`.
