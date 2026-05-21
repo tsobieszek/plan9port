@@ -1,0 +1,19 @@
+# Standalone mkfile for the LLM-facing assets in this directory.
+# Not reached by `./INSTALL` or by `mk install` at the tree root.
+#
+# Today this installs SKILL.md as the `acme` Claude Code skill, under
+# $HOME/.claude/skills/acme/. Other files in this directory (plan,
+# implement, verify, TODO) are prompt templates consumed by hand.
+
+SKILLDIR=$HOME/.claude/skills/acme
+
+install:V:	install-skill
+
+install-skill:V:
+	mkdir -p $SKILLDIR
+	cp SKILL.md $SKILLDIR/SKILL.md
+
+uninstall:V:	uninstall-skill
+
+uninstall-skill:V:
+	rm -f $SKILLDIR/SKILL.md
