@@ -2,28 +2,38 @@
 # Not reached by `./INSTALL` or by `mk install` at the tree root.
 #
 # Targets:
-#   install       — install SKILL.md, the bin/ helpers, the
-#                   commands/update-acme.md slash command, and register
-#                   the PostToolUse hook in ~/.claude/settings.json.
-#   install-skill — SKILL.md only.
-#   install-bin   — bin/ helpers only (acme-update, acme-sync-recent).
-#   install-command — commands/update-acme.md only.
-#   register-hook — modify settings.json so Claude Code runs acme-update
-#                   after Edit/Write/MultiEdit/NotebookEdit.
-#   uninstall*    — symmetric removal targets.
+#   install          — install both skills (acme, rc), the bin/ helpers,
+#                      the commands/update-acme.md slash command, and
+#                      register the PostToolUse hook in
+#                      ~/.claude/settings.json.
+#   install-skill    — both SKILL.md files.
+#   install-acme-skill — acme/SKILL.md only.
+#   install-rc-skill — rc/SKILL.md only.
+#   install-bin      — bin/ helpers only (acme-update, acme-sync-recent).
+#   install-command  — commands/update-acme.md only.
+#   register-hook    — modify settings.json so Claude Code runs
+#                      acme-update after Edit/Write/MultiEdit/NotebookEdit.
+#   uninstall*       — symmetric removal targets.
 #
 # Other files in this directory (plan, implement, verify, TODO) are
 # prompt templates consumed by hand; nothing installs them.
 
-SKILLDIR=$HOME/.claude/skills/acme
-BINDIR=$SKILLDIR/bin
+ACMESKILLDIR=$HOME/.claude/skills/acme
+RCSKILLDIR=$HOME/.claude/skills/rc
+BINDIR=$ACMESKILLDIR/bin
 COMMANDDIR=$HOME/.claude/commands
 
 install:V:	install-skill install-bin install-command register-hook
 
-install-skill:V:
-	mkdir -p $SKILLDIR
-	cp acme/SKILL.md $SKILLDIR/SKILL.md
+install-skill:V:	install-acme-skill install-rc-skill
+
+install-acme-skill:V:
+	mkdir -p $ACMESKILLDIR
+	cp acme/SKILL.md $ACMESKILLDIR/SKILL.md
+
+install-rc-skill:V:
+	mkdir -p $RCSKILLDIR
+	cp rc/SKILL.md $RCSKILLDIR/SKILL.md
 
 install-bin:V:
 	mkdir -p $BINDIR
@@ -40,6 +50,8 @@ register-hook:V:
 
 uninstall:V:	deregister-hook uninstall-command uninstall-bin uninstall-skill
 
+uninstall-skill:V:	uninstall-rc-skill uninstall-acme-skill
+
 deregister-hook:V:
 	rc install-hook.rc remove
 
@@ -49,5 +61,8 @@ uninstall-command:V:
 uninstall-bin:V:
 	rm -f $BINDIR/acme-update $BINDIR/acme-sync-recent
 
-uninstall-skill:V:
-	rm -f $SKILLDIR/SKILL.md
+uninstall-acme-skill:V:
+	rm -f $ACMESKILLDIR/SKILL.md
+
+uninstall-rc-skill:V:
+	rm -f $RCSKILLDIR/SKILL.md

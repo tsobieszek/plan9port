@@ -1,12 +1,20 @@
 # CLAUDE.md
 
-LLM-facing assets for this tree. Three layers:
+LLM-facing assets for this tree. Four layers:
 
 - **`acme/SKILL.md`** — Claude Code skill describing acme's 9P control
   surface (`/mnt/acme`), ctl/nctl verbs, the `event` protocol, rc-script
   conventions, and the absolute rules ("never write `dirty`/`clean` to
   `ctl`", "never mutate a dirty window"). Source of truth for any new
   agent driving a live acme or writing acme rc scripts.
+
+- **`rc/SKILL.md`** — Claude Code skill for plan9port's `rc` shell:
+  the language itself (lists, `~` match, free carets, `` `{} ``
+  substitution, `>[2]` redirections, heredoc rules), the p9p tool
+  flavours (`test`, `awk`, `sed`, `grep`, `tr`, `wc`, `regexp(7)`),
+  and a cheat sheet of bash vs rc reflexes. Source of truth whenever
+  a new script is written or an existing one is edited; cross-linked
+  from `acme/SKILL.md` for scripts that drive `/mnt/acme`.
 
 - **Auto-sync wiring** — `bin/acme-update` is a Claude Code PostToolUse
   hook that keeps acme windows in step with `Edit` / `Write` /
@@ -27,12 +35,17 @@ LLM-facing assets for this tree. Three layers:
 ~/.claude/skills/acme/SKILL.md
 ~/.claude/skills/acme/bin/acme-update           (chmod +x)
 ~/.claude/skills/acme/bin/acme-sync-recent      (chmod +x)
+~/.claude/skills/rc/SKILL.md
 ~/.claude/commands/update-acme.md
 ~/.claude/settings.json                         (PostToolUse entry)
 ```
 
-`mk uninstall` removes them and de-registers the hook. The settings
-merger keeps a `.bak` of the live `settings.json` before each
+Granular targets: `install-acme-skill`, `install-rc-skill`,
+`install-skill` (both), `install-bin`, `install-command`,
+`register-hook`. Symmetrical `uninstall-*` targets reverse each step.
+
+`mk uninstall` removes everything and de-registers the hook. The
+settings merger keeps a `.bak` of the live `settings.json` before each
 modification and refuses to clobber it if the merge would produce
 invalid JSON.
 
@@ -44,7 +57,8 @@ This `mkfile` is standalone: neither `./INSTALL` at the tree root nor
 - Whenever a new `ctl` or `nctl` verb is added or removed in
   `src/cmd/acme/xfid.c`, update the verb list.
 - Whenever a new rc idiom proves useful (or a footgun is discovered),
-  add it to the "Common idioms" or "Hard rules" section.
+  add it to the "Common idioms" or "Hard rules" section here — and
+  cross-check whether the same idiom belongs in `rc/SKILL.md`.
 - Whenever `acme(1)` or `acme(4)` changes meaningfully, re-check the
   catalogue and event protocol sections.
 - Whenever the hook's behaviour changes (`bin/acme-update`), keep the
@@ -53,6 +67,24 @@ This `mkfile` is standalone: neither `./INSTALL` at the tree root nor
 Keep paths in `acme/SKILL.md` project-relative so the file stays portable
 when this directory is split into its own repo (per the `scripts/`
 README note).
+
+## When to update rc/SKILL.md
+
+- Whenever the `rc(1)` man page changes meaningfully (grammar,
+  built-in list, redirection syntax) — re-check the language section
+  and the bash/POSIX cheat-sheet.
+- Whenever a new p9p text tool quirk bites a script (a flag missing
+  vs GNU, a `regexp(7)` shortcoming, a different default), add it to
+  the "Plan 9 toolchain quirks" section with a one-line workaround.
+- Whenever the rc footguns list grows (an empirical discovery while
+  driving acme or writing a tag script), capture it under "Pitfalls".
+- Whenever a new acme-related script is added to `scripts/` that
+  exercises a non-trivial rc construct, link it from the "Pointers"
+  section as a worked example.
+
+Keep `rc/SKILL.md` agnostic of acme specifics where possible — defer
+to `acme/SKILL.md` for ctl/nctl, dirty rules, event protocol — so the
+file stays useful for any rc work, not just acme tag scripts.
 
 ## When to update the hook
 
