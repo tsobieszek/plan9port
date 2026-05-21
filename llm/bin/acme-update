@@ -1,0 +1,124 @@
+#!/usr/local/plan9/bin/rc
+# acme-update — Claude Code PostToolUse hook + manual sync helper.
+#
+# Modes:
+#   acme-update                # hook mode: JSON event read from stdin
+#   acme-update FILE [TOOL]    # file mode: sync one file by path
+#                              # TOOL hints whether to open a new window
+#                              # (only Write triggers new-window creation)
+#
+# Behaviour for Edit / Write / MultiEdit / NotebookEdit on file F:
+#   - Existing acme window, clean: write `get`, then best-effort
+#     `dot=addr` to the line containing the modification, then `show`.
+#   - Existing acme window, dirty: report in `+Errors` via acme/cons,
+#     do not touch the buffer (matches the project's hard rule).
+#   - No window, file exists on disk, tool is Write: open a new window.
+#   - Otherwise: no-op.
+#
+# Exits 0 on success and on every recoverable failure (acme not running,
+# jq missing, file unknown). A hook that exits non-zero would surface as
+# an error to the user, which is never what we want here.
+#
+# Dependencies: 9p (plan9port), jq, awk, grep, sed.
+
+# Silent no-op if tooling missing.
+if (! jq --version >/dev/null >[2]/dev/null) exit 0
+
+# Silent no-op if acme is not reachable (no namespace, not running, etc.).
+if (! 9p read acme/index >/dev/null >[2]/dev/null) exit 0
+
+tool=''
+file=''
+needle=''
+
+if (~ $#* 0) {
+	# Hook mode.
+	input=`{cat}
+	if (~ $input '') exit 0
+	tool=`{echo -n $input | jq -r '.tool_name // empty'}
+	if (! ~ $tool Edit Write MultiEdit NotebookEdit) exit 0
+	file=`{echo -n $input | jq -r '
+		.tool_input.file_path
+		// .tool_input.notebook_path
+		// empty
+	'}
+	needle=`{echo -n $input | jq -r '
+		if .tool_name == "MultiEdit" then
+			(.tool_input.edits | last.new_string)
+		elif .tool_name == "Edit" then
+			.tool_input.new_string
+		elif .tool_name == "NotebookEdit" then
+			(.tool_input.new_source // .tool_input.new_string)
+		else empty end // empty
+	'}
+}
+if not {
+	file=$1
+	tool=$2
+	if (~ $tool '') tool=Edit
+}
+
+if (~ $file '') exit 0
+
+# Take only the first non-empty line of needle for grep matching.
+first=`{echo $needle | sed -n '/[^ 	]/{p;q;}' | sed 's/^[ 	]*//; s/[ 	]*$//'}
+
+# Find the acme window whose tag starts with $file. Returns "<id> <dirty>".
+fn find_window {
+	target=$1
+	for (line in `{9p read acme/index}) {
+		id=`{echo -n $line | awk '{print $1}'}
+		d=`{echo -n $line | awk '{print $5}'}
+		tagname=`{echo -n $line | awk '{print $6}'}
+		if (~ $tagname $target) {
+			echo $id $d
+			return
+		}
+	}
+}
+
+# Best-effort selection: line containing $firstline in $path, or line 1.
+fn set_dot {
+	wid=$1 ; firstline=$2 ; path=$3
+	ln=''
+	if (! ~ $firstline '') {
+		if (test -f $path)
+			ln=`{grep -n -F -m1 -- $firstline $path | head -1 | sed 's/:.*//'}
+	}
+	if (~ $ln '') ln=1
+	echo $ln | 9p write acme/$wid/addr >[2]/dev/null
+	echo 'dot=addr' | 9p write acme/$wid/ctl >[2]/dev/null
+	echo show       | 9p write acme/$wid/ctl >[2]/dev/null
+}
+
+result=`{find_window $file}
+winid=`{echo $result | awk '{print $1}'}
+dirty=`{echo $result | awk '{print $2}'}
+
+if (~ $winid '') {
+	# No existing window. Open one only on Write (which is how Claude
+	# creates files); Edit/MultiEdit on a non-open file leaves it alone.
+	if (~ $tool Write) {
+		if (test -f $file) {
+			ctl=`{9p read acme/new/ctl}
+			newid=`{echo $ctl | awk '{print $1}'}
+			if (! ~ $newid '') {
+				echo 'name '^$file | 9p write acme/$newid/ctl >[2]/dev/null
+				echo get          | 9p write acme/$newid/ctl >[2]/dev/null
+				set_dot $newid $first $file
+			}
+		}
+	}
+	exit 0
+}
+
+if (~ $dirty 1) {
+	echo '[acme-update] '^$file^' was edited by Claude but the acme window is dirty; not reloaded.' \
+		| 9p write acme/cons >[2]/dev/null
+	exit 0
+}
+
+# Clean window: reload from disk, then refocus.
+echo get | 9p write acme/$winid/ctl >[2]/dev/null
+set_dot $winid $first $file
+exit 0

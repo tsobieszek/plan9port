@@ -1,0 +1,80 @@
+#!/usr/local/plan9/bin/rc
+# install-hook.rc — add or remove the acme-update PostToolUse hook in
+# the user's ~/.claude/settings.json. Idempotent for `add`.
+#
+# Usage:  install-hook.rc add | remove
+#
+# The merge is performed with jq, after a .bak copy of settings.json.
+# Without jq, prints the snippet for manual merging and exits non-zero.
+
+action=$1
+if (! ~ $action add remove) {
+	echo 'usage: install-hook.rc add|remove' >[1=2]
+	exit usage
+}
+
+settings=$HOME/.claude/settings.json
+hookpath=$HOME/.claude/skills/acme/bin/acme-update
+
+mkdir -p $HOME/.claude
+
+# Plan 9 rc here-docs do not survive inside `{}` blocks, so the snippet is
+# printed line-by-line from a function.
+fn print_snippet {
+	echo '{'
+	echo '  "hooks": {'
+	echo '    "PostToolUse": ['
+	echo '      {'
+	echo '        "matcher": "Edit|Write|MultiEdit|NotebookEdit",'
+	echo '        "hooks": ['
+	echo '          {"type": "command", "command": "'^$hookpath^'"}'
+	echo '        ]'
+	echo '      }'
+	echo '    ]'
+	echo '  }'
+	echo '}'
+}
+
+if (! jq --version >/dev/null >[2]/dev/null) {
+	echo 'install-hook: jq not found; merge this snippet into '^$settings^' by hand:' >[1=2]
+	print_snippet
+	exit nojq
+}
+
+if (! test -f $settings) echo '{}' > $settings
+
+cp $settings $settings.bak
+
+if (~ $action add) {
+	jq --arg cmd $hookpath '
+		.hooks //= {}
+		| .hooks.PostToolUse //= []
+		# Drop any earlier entry referencing the same command, then re-add.
+		| .hooks.PostToolUse |= map(
+			select((.hooks // []) | all(.command != $cmd))
+		)
+		| .hooks.PostToolUse += [{
+			matcher: "Edit|Write|MultiEdit|NotebookEdit",
+			hooks: [{type: "command", command: $cmd}]
+		}]
+	' $settings > $settings.new
+}
+if not {
+	jq --arg cmd $hookpath '
+		if (.hooks // {}).PostToolUse then
+			.hooks.PostToolUse |= map(
+				.hooks |= map(select(.command != $cmd))
+			)
+			| .hooks.PostToolUse |= map(select((.hooks // []) | length > 0))
+		else . end
+	' $settings > $settings.new
+}
+
+if (! jq . $settings.new >/dev/null >[2]/dev/null) {
+	echo 'install-hook: merge produced invalid JSON; keeping '^$settings^'.bak' >[1=2]
+	rm -f $settings.new
+	exit invalid
+}
+
+mv $settings.new $settings
+echo install-hook: $action hook in $settings

@@ -514,6 +514,62 @@ language. (Plan9port's acid is the same engine as Plan 9's; only the
 symbols-generation workflow differs from the `mk syms` recipe found
 online.)
 
+## Auto-syncing acme with Claude Code edits
+
+This skill ships a PostToolUse hook so that an acme session stays in sync
+with what Claude has changed on disk. Installed by `cd llm && mk install`
+(under this tree); the moving parts are:
+
+| Path | Role |
+|---|---|
+| `~/.claude/skills/acme/bin/acme-update` | rc script. Hook mode reads the event JSON on stdin; manual mode takes `FILE [TOOL]`. |
+| `~/.claude/skills/acme/bin/acme-sync-recent` | Iterates `git diff --name-only HEAD` + untracked files, calls `acme-update` on each. Backbone of the slash command. |
+| `~/.claude/commands/update-acme.md` | Slash command `/update-acme` — runs the manual driver. |
+| `~/.claude/settings.json` | Carries the `PostToolUse` matcher for `Edit\|Write\|MultiEdit\|NotebookEdit` → `acme-update`, written by `install-hook.rc`. |
+
+Per-file behaviour, in priority order (see `bin/acme-update`):
+
+1. Acme not reachable, or `jq` missing — silent no-op (exit 0).
+2. Existing window with this file (tag's first whitespace-separated token
+   matches the file path) and `isdirty == 0` — write `get`, then a
+   best-effort `dot=addr` to the line that contains the first non-blank
+   line of `new_string`, then `show`.
+3. Existing window with `isdirty == 1` — write a `[acme-update] <path>
+   was edited by Claude but the acme window is dirty; not reloaded.`
+   line to `acme/cons`, which surfaces in `+Errors`. The buffer is **not
+   touched**, per the project's hard rule.
+4. No matching window, file exists on disk, tool was `Write` — create a
+   window via `acme/new/ctl`, rename it (`name PATH`), `get`, then move
+   dot to the first line of the new content. Edits/MultiEdits on
+   non-open files leave them alone (Claude can touch files in the
+   background; the hook never forces them onto the user's screen).
+
+Best-effort selection is line-based: `grep -n -F -m1 <first-line> <path>`
+on the file as it now exists on disk; if that fails (e.g. the first
+non-blank line is a generic `}` that matches many lines), the address
+falls back to line 1. The user's requirement allowed approximate
+matches.
+
+### Slash command — manual driver
+
+`/update-acme` runs `acme-sync-recent`, which iterates over
+`git diff --name-only HEAD` plus untracked files, calling `acme-update`
+for each. Use it when the hook is disabled, when a batch of changes
+piled up before the hook was in place, or to recover after the user
+manually closed and reopened acme.
+
+### Disabling or reinstalling
+
+```
+cd $PLAN9/llm
+mk uninstall       # removes everything, including the settings entry
+mk install         # reinstalls
+```
+
+The settings merger backs up `~/.claude/settings.json` to
+`~/.claude/settings.json.bak` before each modification and refuses to
+overwrite the live file if the merge result is not valid JSON.
+
 ## Conventions for this codebase
 
 - Reply to the user in **French**. Code, identifiers, file content, error

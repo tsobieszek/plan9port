@@ -1,0 +1,44 @@
+#!/usr/local/plan9/bin/rc
+# acme-sync-recent — manual driver for the acme-update hook.
+#
+# Walks the files modified in this git working tree (relative to HEAD)
+# and calls acme-update on each, with TOOL=Edit so the helper does not
+# create new windows for files that were merely changed.
+#
+# Intended as the body of the /update-acme slash command.
+
+hook=$HOME/.claude/skills/acme/bin/acme-update
+if (! test -x $hook) {
+	echo 'acme-update is not installed at '^$hook >[1=2]
+	exit nohook
+}
+
+root=`{git rev-parse --show-toplevel >[2]/dev/null}
+if (~ $root '') {
+	echo 'not inside a git repo; nothing to sync' >[1=2]
+	exit notgit
+}
+
+cd $root
+files=`{git diff --name-only HEAD >[2]/dev/null}
+untracked=`{git ls-files --others --exclude-standard >[2]/dev/null}
+files=($files $untracked)
+
+if (~ $#files 0) {
+	echo 'no modified or new files in '^$root
+	exit 0
+}
+
+n=0
+for (f in $files) {
+	if (! ~ $f '') {
+		full=$root/$f
+		# Treat new (untracked) files as Write so a window opens for them.
+		if (! git ls-files --error-unmatch -- $f >/dev/null >[2]/dev/null)
+			$hook $full Write
+		if not
+			$hook $full Edit
+		n=`{expr $n + 1}
+	}
+}
+echo synced $n file^'(s)'

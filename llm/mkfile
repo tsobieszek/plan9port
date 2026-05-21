@@ -1,19 +1,53 @@
 # Standalone mkfile for the LLM-facing assets in this directory.
 # Not reached by `./INSTALL` or by `mk install` at the tree root.
 #
-# Today this installs SKILL.md as the `acme` Claude Code skill, under
-# $HOME/.claude/skills/acme/. Other files in this directory (plan,
-# implement, verify, TODO) are prompt templates consumed by hand.
+# Targets:
+#   install       — install SKILL.md, the bin/ helpers, the
+#                   commands/update-acme.md slash command, and register
+#                   the PostToolUse hook in ~/.claude/settings.json.
+#   install-skill — SKILL.md only.
+#   install-bin   — bin/ helpers only (acme-update, acme-sync-recent).
+#   install-command — commands/update-acme.md only.
+#   register-hook — modify settings.json so Claude Code runs acme-update
+#                   after Edit/Write/MultiEdit/NotebookEdit.
+#   uninstall*    — symmetric removal targets.
+#
+# Other files in this directory (plan, implement, verify, TODO) are
+# prompt templates consumed by hand; nothing installs them.
 
 SKILLDIR=$HOME/.claude/skills/acme
+BINDIR=$SKILLDIR/bin
+COMMANDDIR=$HOME/.claude/commands
 
-install:V:	install-skill
+install:V:	install-skill install-bin install-command register-hook
 
 install-skill:V:
 	mkdir -p $SKILLDIR
 	cp SKILL.md $SKILLDIR/SKILL.md
 
-uninstall:V:	uninstall-skill
+install-bin:V:
+	mkdir -p $BINDIR
+	cp bin/acme-update      $BINDIR/acme-update
+	cp bin/acme-sync-recent $BINDIR/acme-sync-recent
+	chmod +x $BINDIR/acme-update $BINDIR/acme-sync-recent
+
+install-command:V:
+	mkdir -p $COMMANDDIR
+	cp commands/update-acme.md $COMMANDDIR/update-acme.md
+
+register-hook:V:
+	rc install-hook.rc add
+
+uninstall:V:	deregister-hook uninstall-command uninstall-bin uninstall-skill
+
+deregister-hook:V:
+	rc install-hook.rc remove
+
+uninstall-command:V:
+	rm -f $COMMANDDIR/update-acme.md
+
+uninstall-bin:V:
+	rm -f $BINDIR/acme-update $BINDIR/acme-sync-recent
 
 uninstall-skill:V:
 	rm -f $SKILLDIR/SKILL.md
