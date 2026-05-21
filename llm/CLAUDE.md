@@ -107,6 +107,20 @@ add).
   wrap it in a `fn name { … }` *and* use a series of `echo` statements
   instead of a heredoc (functions have the same `{}` problem for
   heredocs). `install-hook.rc` uses the function + `echo` pattern.
+- **`for(line in `{cmd})` splits on every whitespace, not on
+  newlines.** A multi-field record (e.g. one line of `acme/index`)
+  becomes one iteration per word; `awk '{print $K}'` for K>1 then
+  returns empty every time. Use ``` `$nl{cmd} ``` with `nl='\n'` to
+  split strictly on newlines whenever the records contain spaces.
+  `bin/acme-update`'s `find_window` was originally written without this
+  and silently never matched a window; see `rc/SKILL.md` "Reading one
+  field out of structured output".
+- **`return` is not a builtin in plan9port rc.** Inside an `fn`, it is
+  treated as an external command and fails with `return: No such file
+  or directory`. To short-circuit a scan in a function, either let an
+  `awk`/`sed` helper exit at the first hit (current `find_window`
+  pattern) or set a sentinel variable and guard subsequent iterations.
+  See `rc/SKILL.md` Pitfalls.
 - `^` is concatenation: `'a'^$var^'b'`.
 - `~ var pat1 pat2 …` is the multi-pattern match used as a condition;
   `! ~ var pat` negates.

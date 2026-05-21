@@ -574,25 +574,34 @@ This is the rc analogue of `${1:-plain}`.
 
 ### Reading one field out of structured output
 
-The mainstay of every script in this tree:
+Single record (single line, no embedded record boundary):
 
 ```rc
 line=`{9p read acme/$winid/ctl}
 font=`{echo $line | awk '{print $7}'}
 ```
 
-For multi-line output, iterate:
+Multi-record output (`acme/index`, `acme/log`, `git diff --name-only`,
+anything with one record per line) — iterate **with a newline separator**,
+not the default `$ifs`:
 
 ```rc
-for(line in `{9p read acme/index}) {
+nl='
+'
+for(line in `$nl{9p read acme/index}) {
     id=`{echo $line | awk '{print $1}'}
+    isdirty=`{echo $line | awk '{print $5}'}
     ...
 }
 ```
 
-(`for(line in …)` with the default `$ifs` produces one element per
-whitespace-bounded word. If the records contain spaces, set `ifs` to a
-newline-only string inside a subshell — see Substitution above.)
+`for(line in `{cmd})` with the default `$ifs` splits on every
+whitespace character: a single multi-field record becomes N individual
+iterations (one per word), `awk '{print $K}'` for K>1 returns empty on
+every word, and condition tests like `~ $isdirty 0` never match. This
+is one of the most common bash-vs-rc reflex traps — `bin/acme-update`
+hit it in `find_window`. Use `$nl` whenever each record holds more
+than one field of interest.
 
 ### Safely ingesting JSON / multi-line payloads
 
@@ -707,6 +716,39 @@ disappear when it exits.
 - **`while () { … }` is the rc equivalent of `while true; do … done`.**
   An empty condition is null status, hence true. There is no
   `while true` keyword.
+- **`return` is not a builtin in plan9port rc** (confirm with
+  `whatis return` — it reports "not found"). Inside an `fn`, `return`
+  is treated as an external command, fails to exec, prints `return: No
+  such file or directory` to stderr, and execution continues. To exit
+  a function early, either pipe the search through `awk`/`sed` and let
+  the helper exit at the first hit, or set a sentinel variable and
+  guard subsequent iterations. `exit` works but tears down the whole
+  script.
+- **Pseudo-local variables in `fn` can silently clobber `$path`,
+  `$home`, `$ifs`, `$cdpath`, `$prompt`.** Because `fn` has no
+  `local`, an assignment like `fn set_dot { wid=$1; path=$3; ... }`
+  rewrites the **global** `path` — and rc keeps `$path` and `$PATH`
+  in sync, so the value you wrote (a file path, not a list of bin
+  directories) now governs every subsequent `exec`. Symptoms are
+  *delayed*: the assignment succeeds, then a later `9p`, `awk`,
+  `echo`, or pipe failure prints `<cmd>: No such file or directory`
+  or `Not a directory` and the script aborts with `null list in
+  concatenation` or similar, well after the offending line. Bitten
+  in the wild by `acme-update`'s `set_dot` helper. Two cures: prefix
+  every fn-internal name (`sd_path`, `sd_wid`, …) so it cannot
+  collide with rc's reserved variables; or wrap the body in
+  `@{ ... }` so mutations vanish on return. Reserved names worth
+  memorising: `path`, `home`, `ifs`, `cdpath`, `prompt`, `status`,
+  `apid`, `pid`.
+- **`'foo' ^ `''{cmd}` is fatal when `cmd` produces no output.**
+  Empty captures from `` `''{...} `` (or any `` `{...} ``) yield the
+  empty list `()`, and `'string' ^ ()` aborts with `rc: null list in
+  concatenation` instead of returning `'string'`. Capture into a
+  variable first, then concatenate with `$"var` — `$"` forces a
+  zero-element list to the empty string, so the join is safe:
+  `preview=`''{cmd}; echo 'first 100: '^$"preview`. Bitten in the
+  wild by `acme-update`'s `extracted needle` debug line when the
+  tool was `Write` (no `new_string` field, jq emits `empty`).
 
 ## Plumbing and 9P from rc
 

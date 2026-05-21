@@ -4,15 +4,16 @@
 # Modes:
 #   acme-update                # hook mode: JSON event read from stdin
 #   acme-update FILE [TOOL]    # file mode: sync one file by path
-#                              # TOOL hints whether to open a new window
-#                              # (only Write triggers new-window creation)
 #
 # Behaviour for Edit / Write / MultiEdit / NotebookEdit on file F:
 #   - Existing acme window, clean: write `get`, then best-effort
-#     `dot=addr` to the line containing the modification, then `show`.
+#     `dot=addr` to the range spanning the modification (first to last
+#     non-blank line of `new_string`), then `show`. Falls back to a
+#     single line, or line 1, when the lookup fails.
 #   - Existing acme window, dirty: report in `+Errors` via acme/cons,
 #     do not touch the buffer (matches the project's hard rule).
-#   - No window, file exists on disk, tool is Write: open a new window.
+#   - No window, file exists on disk: open a new window for any of
+#     the supported tools (Write / Edit / MultiEdit / NotebookEdit).
 #   - Otherwise: no-op.
 #
 # Exits 0 on success and on every recoverable failure (acme not running,
@@ -31,18 +32,21 @@ tool=''
 file=''
 needle=''
 
+nl='
+'
+
 if (~ $#* 0) {
 	# Hook mode.
-	input=`{cat}
-	if (~ $input '') exit 0
-	tool=`{echo -n $input | jq -r '.tool_name // empty'}
+	payload=`''{cat}
+	if (~ $payload '') exit 0
+	tool=`$nl{echo -n $payload | jq -r '.tool_name // empty'}
 	if (! ~ $tool Edit Write MultiEdit NotebookEdit) exit 0
-	file=`{echo -n $input | jq -r '
+	file=`$nl{echo -n $payload | jq -r '
 		.tool_input.file_path
 		// .tool_input.notebook_path
 		// empty
 	'}
-	needle=`{echo -n $input | jq -r '
+	needle=`''{echo -n $payload | jq -r '
 		if .tool_name == "MultiEdit" then
 			(.tool_input.edits | last.new_string)
 		elif .tool_name == "Edit" then
@@ -60,35 +64,48 @@ if not {
 
 if (~ $file '') exit 0
 
-# Take only the first non-empty line of needle for grep matching.
-first=`{echo $needle | sed -n '/[^ 	]/{p;q;}' | sed 's/^[ 	]*//; s/[ 	]*$//'}
+# First and last non-blank lines of needle, for range-style dot=addr.
+# Coerce empty captures (e.g. tool=Write has no needle) back to '',
+# otherwise the set_dot call below collapses to fewer args.
+first=`$nl{echo -n $needle | sed -n '/[^ 	]/{p;q;}' | sed 's/^[ 	]*//; s/[ 	]*$//'}
+last=`$nl{echo -n $needle | awk '/[^ 	]/ { line=$0 } END { if (line != "") print line }' | sed 's/^[ 	]*//; s/[ 	]*$//'}
+if (~ $#first 0) first=''
+if (~ $#last 0) last=''
 
 # Find the acme window whose tag starts with $file. Returns "<id> <dirty>".
+# Done in a single awk pipe: rc has no `return` builtin to break out of a
+# `for` loop early, and a per-line `for(line in `$nl{9p read acme/index})`
+# would fork awk three times per window.
 fn find_window {
-	target=$1
-	for (line in `{9p read acme/index}) {
-		id=`{echo -n $line | awk '{print $1}'}
-		d=`{echo -n $line | awk '{print $5}'}
-		tagname=`{echo -n $line | awk '{print $6}'}
-		if (~ $tagname $target) {
-			echo $id $d
-			return
-		}
-	}
+	9p read acme/index | awk -v t=$1 '$6 == t { print $1, $5; exit }'
 }
 
-# Best-effort selection: line containing $firstline in $path, or line 1.
+# Best-effort selection of the modified range. Looks up $sd_first in
+# $sd_path for the start line; if $sd_last differs from $sd_first,
+# searches forward from start for the end line. Writes "start,end" to
+# acme/<id>/addr, or just "start" (single line), or "1" on miss.
+# NB: rc has no `local`. A plain `path=$3` would shadow the global $path
+# (rc keeps $path and $PATH in sync) and break every subsequent command,
+# so all fn-internal names are prefixed with sd_.
 fn set_dot {
-	wid=$1 ; firstline=$2 ; path=$3
-	ln=''
-	if (! ~ $firstline '') {
-		if (test -f $path)
-			ln=`{grep -n -F -m1 -- $firstline $path | head -1 | sed 's/:.*//'}
+	sd_wid=$1 ; sd_first=$2 ; sd_last=$3 ; sd_path=$4
+	sd_start=''
+	sd_end=''
+	if (! ~ $sd_first '') {
+		if (test -f $sd_path)
+			sd_start=`{awk -v s=$sd_first 'index($0, s) { print NR; exit }' $sd_path}
 	}
-	if (~ $ln '') ln=1
-	echo $ln | 9p write acme/$wid/addr >[2]/dev/null
-	echo 'dot=addr' | 9p write acme/$wid/ctl >[2]/dev/null
-	echo show       | 9p write acme/$wid/ctl >[2]/dev/null
+	if (~ $sd_start '') sd_start=1
+	if (! ~ $sd_last '' && ! ~ $sd_last $sd_first) {
+		if (test -f $sd_path)
+			sd_end=`{awk -v s=$sd_last -v from=$sd_start 'NR>=from && index($0, s) { print NR; exit }' $sd_path}
+	}
+	if (~ $sd_end '') sd_end=$sd_start
+	if (~ $sd_start $sd_end) sd_addr=$sd_start
+	if not                   sd_addr=$sd_start^','^$sd_end
+	awk -v a=$sd_addr 'BEGIN{printf a}' | 9p write acme/$sd_wid/addr >[2]/dev/null
+	echo 'dot=addr' | 9p write acme/$sd_wid/ctl >[2]/dev/null
+	echo show       | 9p write acme/$sd_wid/ctl >[2]/dev/null
 }
 
 result=`{find_window $file}
@@ -96,16 +113,16 @@ winid=`{echo $result | awk '{print $1}'}
 dirty=`{echo $result | awk '{print $2}'}
 
 if (~ $winid '') {
-	# No existing window. Open one only on Write (which is how Claude
-	# creates files); Edit/MultiEdit on a non-open file leaves it alone.
-	if (~ $tool Write) {
+	# No existing window. Open one for any supported tool when the
+	# file is present on disk.
+	if (~ $tool Write Edit MultiEdit NotebookEdit) {
 		if (test -f $file) {
 			ctl=`{9p read acme/new/ctl}
 			newid=`{echo $ctl | awk '{print $1}'}
 			if (! ~ $newid '') {
 				echo 'name '^$file | 9p write acme/$newid/ctl >[2]/dev/null
 				echo get          | 9p write acme/$newid/ctl >[2]/dev/null
-				set_dot $newid $first $file
+				set_dot $newid $first $last $file
 			}
 		}
 	}
@@ -120,5 +137,5 @@ if (~ $dirty 1) {
 
 # Clean window: reload from disk, then refocus.
 echo get | 9p write acme/$winid/ctl >[2]/dev/null
-set_dot $winid $first $file
+set_dot $winid $first $last $file
 exit 0

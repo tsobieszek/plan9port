@@ -74,10 +74,15 @@ if (! ~ $isdirty 0) {
 }
 ```
 
-For multi-window scripts, filter `acme/index`:
+For multi-window scripts, filter `acme/index`. Split on newlines (not
+on the default whitespace `$ifs`) so each iteration is one full record;
+otherwise `awk '{print $5}'` runs on individual words and is always
+empty:
 
 ```rc
-for(line in `{9p read acme/index}) {
+nl='
+'
+for(line in `$nl{9p read acme/index}) {
     id=`{echo $line | awk '{print $1}'}
     isdirty=`{echo $line | awk '{print $5}'}
     if (~ $isdirty 0) {
@@ -120,7 +125,7 @@ The local emphasis feature adds (per-window) the `nctl` file with the verbs
 |---|---|---|
 | `tag` | tag text | append (file offset ignored) |
 | `body` | body text | append (file offset ignored) |
-| `addr` | the current addr as **two fixed-width 11-char rune offsets `q0 q1`** (not `#m,#n` — the man page is wrong; verify in `$PLAN9/src/cmd/acme/xfid.c:391`) | set address — line numbers, regex, sam-style compound addresses |
+| `addr` | the current addr as **two fixed-width 11-char rune offsets `q0 q1`** (not `#m,#n` — the man page is wrong; verify in `$PLAN9/src/cmd/acme/xfid.c:391`). **Opening `addr` resets it to `0,0`** (xfid.c:110 — `if(w->nopen[q]++ == 0) w->addr = range(0, 0)`), so `9p read acme/<id>/addr` always returns `0 0` immediately after the open. To inspect the current selection from outside, write `addr=dot` to `ctl` then read `xdata`. | set address — line numbers, regex, sam-style compound addresses |
 | `data` | text from addr onward, count-bounded; **advances addr to the end of what was read** | replace text at addr with the bytes written; addr advances likewise |
 | `xdata` | as `data` but reads stop at the end of `addr` and do not advance it | same |
 | `ctl` | a single line, no trailing newline: 10 fields — `id ntag nbody isdir isdirty width font tabwidth undo redo`. First 5 are fixed-width `%11d ` (so byte offsets 0, 12, 24, 36, 48); the font field is Plan 9 `%q`-quoted (wrapped in single quotes if it contains whitespace or specials) | one verb per line (see below) |
@@ -197,10 +202,13 @@ digits).
 
 ### Listing, inspecting
 
-Iterate all windows, skipping dirty:
+Iterate all windows, skipping dirty. The newline separator is
+mandatory — see "Checking dirtiness" above for why:
 
 ```rc
-for(line in `{9p read acme/index}) {
+nl='
+'
+for(line in `$nl{9p read acme/index}) {
     id=`{echo $line | awk '{print $1}'}
     isdirty=`{echo $line | awk '{print $5}'}
     if (~ $isdirty 0)
@@ -214,6 +222,18 @@ whitespace, since `ctl` `%q`-quotes the field):
 ```rc
 font=`{9p read acme/$winid/ctl | awk '{print $7}'}
 ```
+
+Read the **current selection** (`dot`) as text. Reading `addr` directly
+returns `0 0` because opening the file resets it (xfid.c:110), so go
+via `addr=dot` + `xdata`:
+
+```rc
+echo 'addr=dot' | 9p write acme/$winid/ctl
+sel=`''{9p read acme/$winid/xdata}
+```
+
+`xdata` reads `q0..q1` without advancing addr (unlike `data`), so the
+selection is preserved for whatever you do next.
 
 ### Writing to a window
 
@@ -551,17 +571,40 @@ Per-file behaviour, in priority order (see `$PLAN9/llm/bin/acme-update`):
    was edited by Claude but the acme window is dirty; not reloaded.`
    line to `acme/cons`, which surfaces in `+Errors`. The buffer is **not
    touched**, per the project's hard rule.
-4. No matching window, file exists on disk, tool was `Write` — create a
-   window via `acme/new/ctl`, rename it (`name PATH`), `get`, then move
-   dot to the first line of the new content. Edits/MultiEdits on
-   non-open files leave them alone (Claude can touch files in the
-   background; the hook never forces them onto the user's screen).
+4. No matching window, file exists on disk — create a window via
+   `acme/new/ctl`, rename it (`name PATH`), `get`, then move dot to
+   the range spanning the modification (first to last non-blank line
+   of `new_string`). Triggered by any of `Write`, `Edit`, `MultiEdit`,
+   `NotebookEdit` so that surfacing always tracks the file Claude
+   just touched.
 
-Best-effort selection is line-based: `grep -n -F -m1 <first-line> <path>`
-on the file as it now exists on disk; if that fails (e.g. the first
-non-blank line is a generic `}` that matches many lines), the address
-falls back to line 1. The user's requirement allowed approximate
-matches.
+Best-effort selection is line-based and writes a sam-style range
+`start,end` to `acme/<id>/addr`: `awk 'index($0, s)'` (fixed-string)
+finds the line containing the first non-blank line of `new_string`,
+then searches forward from there for the last non-blank line. When
+they coincide (single-line edit, or only one match), the address
+collapses to a single line. When the lookup fails (no match, or
+needle empty for the `Write` case), the address falls back to line 1.
+The user's requirement allowed approximate matches.
+
+To verify the resulting selection from outside the editor — e.g.
+when debugging `set_dot` — write `addr=dot` to `acme/<id>/ctl` and
+then read `acme/<id>/xdata`. Do **not** read `addr` directly: opening
+that file resets it to `0,0` before the read (see the per-file table
+above), so the read always answers `0 0`.
+
+### rc footgun the hook keeps tripping over
+
+`fn set_dot { wid=$1 ; firstline=$2 ; path=$3 ; ... }` looks innocent
+but **rewrites the global `$path`**, which rc keeps in sync with
+`$PATH`. Every subsequent `9p` / `awk` / `echo` then fails with
+`No such file or directory`, and rc aborts with `null list in
+concatenation` somewhere downstream. The crash is silent in hook
+mode because hook stderr is not journalled. The cure used in
+`acme-update` is to prefix every fn-internal name (`sd_path`,
+`sd_wid`, …); see `rc/SKILL.md` Pitfalls for the full list of
+reserved variable names. The same rule applies to any rc helper
+that drives `/mnt/acme`.
 
 ### Slash command — manual driver
 

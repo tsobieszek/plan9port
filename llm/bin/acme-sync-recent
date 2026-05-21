@@ -13,15 +13,17 @@ if (! test -x $hook) {
 	exit nohook
 }
 
-root=`{git rev-parse --show-toplevel >[2]/dev/null}
+nl='
+'
+root=`$nl{git rev-parse --show-toplevel >[2]/dev/null}
 if (~ $root '') {
 	echo 'not inside a git repo; nothing to sync' >[1=2]
 	exit notgit
 }
 
 cd $root
-files=`{git diff --name-only HEAD >[2]/dev/null}
-untracked=`{git ls-files --others --exclude-standard >[2]/dev/null}
+files=`$nl{git diff --name-only HEAD >[2]/dev/null}
+untracked=`$nl{git ls-files --others --exclude-standard >[2]/dev/null}
 files=($files $untracked)
 
 if (~ $#files 0) {

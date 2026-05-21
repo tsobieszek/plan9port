@@ -13,6 +13,14 @@ LLM-facing assets for this tree.
 | `commands/update-acme.md` | Slash command `/update-acme` for manual sync (fallback when the hook is disabled). |
 | `install-hook.rc` | Settings merger. Adds/removes the PostToolUse entry in `~/.claude/settings.json` with a `.bak` rollback and a JSON-validity check. Falls back to printing a manual-merge snippet when `jq` is missing. Worked example of rc's heredoc-in-`{}` workaround (function full of `echo` lines). |
 
+### Implementation notes
+
+The helper scripts are written in Plan 9 `rc` and use a few specific constructs to work robustly with JSON and filenames:
+- **Newline preservation**: We capture the `stdin` JSON payload using an empty separator (`` `''{cat} ``) so `rc` does not squash newlines and spaces, preventing corruption of JSON string values.
+- **Space-safe iteration**: We use a literal newline variable (`nl='
+'`) as the separator for command substitutions (e.g. `` `$nl{git diff...} ``) so filenames and JSON strings with internal spaces are preserved as single list elements.
+- **Standard awk**: Plan 9 `grep` implements `regexp(7)` and lacks GNU extensions like `-F` and `-m1`. We instead use standard `awk -v s=$firstline 'index($0, s)'` for safe, fixed-string prefix matching against file contents.
+
 ## Prompt templates (consumed by hand)
 
 | File | Purpose |
