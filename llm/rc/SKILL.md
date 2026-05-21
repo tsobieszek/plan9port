@@ -678,6 +678,49 @@ fn apply_bold {
 The `@{ … }` runs the block in a subshell; any variable changes inside
 disappear when it exits.
 
+### Temporary files and signal cleanup
+
+Scripts that create temporary files must handle signals to guarantee
+cleanup. Rc exposes signal handlers as ordinary functions:
+
+```rc
+tmpfile=''
+
+fn cleanup {
+    if (! ~ $tmpfile '')
+        rm -f $tmpfile
+}
+
+fn sigterm { cleanup; exit }
+fn sigint  { cleanup; exit }
+fn sighup  { cleanup; exit }
+fn sigquit { cleanup; exit }
+
+tmpfile=/tmp/myscript.$pid
+# ... use $tmpfile ...
+cleanup
+```
+
+Initialise the variable to `''` before defining `cleanup` so the guard
+`! ~ $tmpfile ''` is safe even if a signal fires before the file is
+created. The four handlers listed above cover the common termination
+signals; add `sigpipe` if the script reads from a pipe.
+
+### Waiting for a background process
+
+`$apid` holds the PID of the most recently backgrounded command.
+`wait $apid` blocks until it exits and sets `$status` to its exit string.
+Use this pattern for graphical tools that must not block the terminal but
+whose exit signals the next step:
+
+```rc
+meld left.txt right.txt &
+wait $apid
+# examine result after meld closes
+```
+
+`wait` with no argument waits for all background processes.
+
 ## Pitfalls
 
 - **`exit 0` is misleading even when it works.** The string `0` is

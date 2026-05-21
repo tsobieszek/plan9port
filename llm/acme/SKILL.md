@@ -42,8 +42,14 @@ These come up often enough to be lifted out of the rest.
   warning that the buffer is unsaved. Writing `dirty` does the opposite:
   it marks a clean buffer as modified, so `Del` refuses on the first try
   and the user has no real change to save. Acme manages this flag itself.
-  If a script genuinely needs to make a window clean, the right action is
-  `put` (which writes the file *and* clears the flag honestly).
+  If a script needs to save and mark a window clean as a standalone
+  operation, `put` is correct. **Exception:** after the script has itself
+  replaced the buffer via `addr` + `data` writes, `put` does not reliably
+  clear the dirty flag from an external process — empirically observed even
+  with a sleep before the write, ruling out a timing race. In that pattern
+  the only effective tool is `clean`, which wipes undo history. Use it
+  deliberately and document the intent (see `scripts/T` for the canonical
+  example and the comment that accompanies it).
 - **Never mutate the body of a dirty window.** Writing to `body`, `data`, or
   running any `Edit` command against a window whose dirty flag is set risks
   discarding the user's unsaved work. Before any mutating write, check the
