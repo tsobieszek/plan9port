@@ -30,6 +30,13 @@ The helper scripts are written in Plan 9 `rc` and use a few specific constructs 
 | `verify` | Verify the last completed stage. |
 | `TODO` | In-flight task notes (currently: converting the in-editor `Emph*` commands to standalone rc scripts). |
 
+## Reference docs
+
+| File | Purpose |
+|---|---|
+| `CLAUDE.md` | Maintainer guide: when to update each `SKILL.md` or the hook, plus an "Acme quirks the hook depends on" cheat sheet (notably `dot=addr` vs `addr=dot`, the no-trailing-newline rule for `<id>/addr`, and the buffers the hook deliberately never touches). |
+| `codebase_analysis.md` | Whole-directory analysis: per-file breakdown, the exact 9P surfaces the hook reads/writes (and the ones it never touches), execution and dependency diagrams, security and performance notes, suggested improvements. |
+
 ## Install
 
 ```

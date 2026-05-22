@@ -128,3 +128,36 @@ add).
 - `>[2]/dev/null` discards stderr; `>[1=2]` makes stdout go to stderr.
 - Use `if (cond) cmd` (single statement, no braces) when a heredoc is
   the only thing inside the branch.
+
+## Acme quirks the hook depends on
+
+- **`dot=addr` vs `addr=dot` are opposites.** The hook always writes
+  `dot=addr` (move the user's selection onto the address just written
+  to `<id>/addr`); `addr=dot` would do the inverse and is never used.
+  Don't mix them up when describing or modifying `set_dot`.
+- **`<id>/addr` must be written without a trailing newline.** The
+  parser rejects `\n` as a non-address character and falls back to
+  the previous address (often `0,0`), silently. The hook uses
+  `awk 'BEGIN{printf a}'` for this reason; preserve that pattern.
+- **The hook never reads `<id>/ctl`.** Dirtiness comes from field 5
+  of `acme/index`, fetched once by `find_window` in a single `awk`
+  pass. If you need a new per-window attribute, prefer extending
+  that pass over adding a `9p read acme/<id>/ctl`.
+- **The hook never touches `<id>/body`, `<id>/data`, `<id>/xdata`,
+  `<id>/tag`, or `<id>/event`.** All buffer refreshes go through
+  `echo get | 9p write <id>/ctl` (acme reloads from disk). Keep this
+  property if you extend the hook — direct `data` writes break the
+  "never mutate a dirty window" invariant the moment a race opens.
+
+## See also
+
+- `README.md` — file-by-file table, installation summary, and three
+  rc implementation notes (newline preservation, space-safe iteration,
+  awk-as-fixed-string-grep). Front door for someone arriving at the
+  directory for the first time.
+- `codebase_analysis.md` — whole-directory analysis: per-file
+  breakdown, exact 9P surfaces consumed by the hook, architecture
+  diagrams, security and performance assessment, and a punch list of
+  potential improvements. Update when the directory layout changes
+  meaningfully, when the hook's 9P surface changes, or when a new
+  script joins `bin/`.
